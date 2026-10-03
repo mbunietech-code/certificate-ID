@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Cache;
  */
 class SampleGallery
 {
-    private const CACHE_KEY = 'landing:samples:v1';
+    private const CACHE_KEY = 'landing:samples:v3';
 
     public function __construct(private TemplateRenderer $renderer, private SampleAssets $assets) {}
 

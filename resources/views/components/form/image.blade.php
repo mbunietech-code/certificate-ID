@@ -4,7 +4,7 @@
     <div class="flex items-start gap-3" @if ($camera) data-camera-field @endif>
         <div class="grid size-16 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-50 {{ $round ? 'rounded-full' : 'rounded' }}">
             @if ($path)
-                <img src="{{ Storage::disk('public')->url($path) }}" alt="" class="size-full {{ $round ? 'object-cover' : 'object-contain' }}" data-camera-preview>
+                <img src="{{ public_storage_url($path) }}" alt="" class="size-full {{ $round ? 'object-cover' : 'object-contain' }}" data-camera-preview>
             @else
                 <x-icon name="upload" class="size-5 text-slate-300" data-camera-placeholder/>
                 <img src="" alt="" class="hidden size-full {{ $round ? 'object-cover' : 'object-contain' }}" data-camera-preview>
@@ -26,6 +26,7 @@
                 <div class="mt-2 flex flex-wrap gap-2">
                     <button type="button" class="btn btn-secondary btn-sm" data-camera-start><x-icon name="camera"/> Use camera</button>
                     <button type="button" class="btn btn-primary btn-sm" data-camera-capture hidden><x-icon name="check"/> Capture</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-camera-switch hidden><x-icon name="refresh"/> Switch camera</button>
                     <button type="button" class="btn btn-secondary btn-sm" data-camera-stop hidden><x-icon name="x"/> Close camera</button>
                 </div>
                 <p class="form-error" data-camera-error hidden></p>

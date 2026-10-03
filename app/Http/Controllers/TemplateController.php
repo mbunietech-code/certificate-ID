@@ -222,7 +222,7 @@ abstract class TemplateController extends Controller
 
         $this->audit('template.asset_uploaded', null, "Uploaded template image {$path}");
 
-        return response()->json(['path' => $path, 'url' => Storage::disk('public')->url($path)]);
+        return response()->json(['path' => $path, 'url' => public_storage_url($path)]);
     }
 
     /** @return array<string, mixed> */

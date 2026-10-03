@@ -31,6 +31,17 @@ if (! function_exists('format_date')) {
     }
 }
 
+if (! function_exists('public_storage_url')) {
+    function public_storage_url(?string $path): ?string
+    {
+        if (! $path) {
+            return null;
+        }
+
+        return '/storage/'.ltrim(str_replace('\\', '/', $path), '/');
+    }
+}
+
 if (! function_exists('verification_url')) {
     /** Public verification URL embedded in QR codes. Base is configurable in system settings. */
     function verification_url(string $type, string $code): string

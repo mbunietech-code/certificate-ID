@@ -3,7 +3,6 @@
 namespace App\Models\Concerns;
 
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Storage;
 
 /** Shared name/photo helpers for students and staff. */
 trait IsPerson
@@ -15,7 +14,7 @@ trait IsPerson
 
     public function photoUrl(): ?string
     {
-        return $this->photo_path ? Storage::disk('public')->url($this->photo_path) : null;
+        return public_storage_url($this->photo_path);
     }
 
     public function initials(): string

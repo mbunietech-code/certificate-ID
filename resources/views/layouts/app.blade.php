@@ -20,7 +20,7 @@
     <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 hidden w-60 shrink-0 flex-col overflow-y-auto bg-slate-900 px-3 pb-6 lg:flex">
         <a href="{{ route('dashboard') }}" class="flex items-center gap-2.5 px-2 py-4">
             @if (setting('system_logo'))
-                <img src="{{ Storage::disk('public')->url(setting('system_logo')) }}" alt="" class="size-8 rounded object-contain bg-white p-0.5">
+                <img src="{{ public_storage_url(setting('system_logo')) }}" alt="" class="size-8 rounded object-contain bg-white p-0.5">
             @else
                 <span class="grid size-8 place-items-center rounded bg-blue-600 text-white"><x-icon name="id-card" class="size-5"/></span>
             @endif

@@ -11,7 +11,7 @@
 <div class="flex min-h-full flex-col items-center justify-center px-4 py-10">
     <div class="mb-6 flex items-center gap-2.5">
         @if (setting('system_logo'))
-            <img src="{{ Storage::disk('public')->url(setting('system_logo')) }}" alt="" class="size-10 object-contain">
+            <img src="{{ public_storage_url(setting('system_logo')) }}" alt="" class="size-10 object-contain">
         @else
             <span class="grid size-10 place-items-center rounded-lg bg-blue-700 text-white"><x-icon name="id-card" class="size-6"/></span>
         @endif

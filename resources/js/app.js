@@ -90,9 +90,11 @@ document.querySelectorAll('[data-camera-field]').forEach((field) => {
     const canvas = field.querySelector('[data-camera-canvas]');
     const start = field.querySelector('[data-camera-start]');
     const capture = field.querySelector('[data-camera-capture]');
+    const switchCamera = field.querySelector('[data-camera-switch]');
     const stop = field.querySelector('[data-camera-stop]');
     const error = field.querySelector('[data-camera-error]');
     let stream = null;
+    let facingMode = 'environment';
 
     const drawPassportCrop = () => {
         const targetSize = 900;
@@ -130,11 +132,12 @@ document.querySelectorAll('[data-camera-field]').forEach((field) => {
         if (video) video.srcObject = null;
         if (panel) panel.hidden = true;
         if (capture) capture.hidden = true;
+        if (switchCamera) switchCamera.hidden = true;
         if (stop) stop.hidden = true;
         if (start) start.hidden = false;
     };
 
-    start?.addEventListener('click', async () => {
+    const startCamera = async () => {
         error.hidden = true;
         if (!navigator.mediaDevices?.getUserMedia) {
             showError('Camera is not available in this browser.');
@@ -142,15 +145,41 @@ document.querySelectorAll('[data-camera-field]').forEach((field) => {
         }
 
         try {
-            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+            stream?.getTracks().forEach((track) => track.stop());
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facingMode } }, audio: false });
             video.srcObject = stream;
             panel.hidden = false;
             start.hidden = true;
             capture.hidden = false;
+            switchCamera.hidden = false;
             stop.hidden = false;
         } catch (err) {
+            if (facingMode === 'environment') {
+                facingMode = 'user';
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facingMode } }, audio: false });
+                    video.srcObject = stream;
+                    panel.hidden = false;
+                    start.hidden = true;
+                    capture.hidden = false;
+                    switchCamera.hidden = false;
+                    stop.hidden = false;
+                    return;
+                } catch (fallbackErr) {
+                    // Show the generic camera error below.
+                }
+            }
             showError('Camera permission was denied or no camera was found.');
         }
+    };
+
+    start?.addEventListener('click', async () => {
+        await startCamera();
+    });
+
+    switchCamera?.addEventListener('click', async () => {
+        facingMode = facingMode === 'environment' ? 'user' : 'environment';
+        await startCamera();
     });
 
     capture?.addEventListener('click', () => {

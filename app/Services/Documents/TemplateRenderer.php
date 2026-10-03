@@ -294,7 +294,7 @@ class TemplateRenderer
             return null;
         }
 
-        return $mode === 'pdf' ? $abs : Storage::disk('public')->url($path);
+        return $mode === 'pdf' ? $abs : public_storage_url($path);
     }
 
     /** Only files that exist inside the public disk are ever rendered. */

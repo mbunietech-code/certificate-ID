@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Support\Facades\Storage;
 
 #[Fillable([
     'school_code', 'name', 'short_name', 'registration_number', 'address', 'region', 'district', 'ward',
@@ -63,6 +62,6 @@ class School extends Model
 
     public function logoUrl(): ?string
     {
-        return $this->logo_path ? Storage::disk('public')->url($this->logo_path) : null;
+        return public_storage_url($this->logo_path);
     }
 }
