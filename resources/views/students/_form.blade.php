@@ -45,7 +45,7 @@
     <div class="card self-start">
         <div class="card-header"><h2 class="card-title">Photo</h2></div>
         <div class="card-body">
-            <x-form.image name="photo" label="Passport photo" :path="$student->photo_path" remove-name="remove_photo" round hint="JPG/PNG, max 4 MB. Resized automatically; a square, well-lit head-and-shoulders photo prints best."/>
+            <x-form.image name="photo" label="Passport photo" :path="$student->photo_path" remove-name="remove_photo" round camera hint="Upload JPG/PNG or use the camera. A square, well-lit head-and-shoulders photo prints best."/>
         </div>
     </div>
 </div>

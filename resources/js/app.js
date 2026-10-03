@@ -6,6 +6,7 @@
  *  - data-dismiss      : remove an alert
  *  - data-menu-toggle  : toggle a dropdown / mobile sidebar target
  *  - data-poll-url     : print job progress polling
+ *  - data-camera-field : capture an image into a file input
  */
 
 document.addEventListener('submit', (e) => {
@@ -59,6 +60,123 @@ document.addEventListener('change', (e) => {
     if (e.target.matches('[data-autosubmit]')) {
         e.target.form?.requestSubmit();
     }
+
+    if (e.target.matches('[data-camera-input]')) {
+        previewSelectedImage(e.target);
+    }
+});
+
+const previewSelectedImage = (input) => {
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const field = input.closest('[data-camera-field]');
+    const preview = field?.querySelector('[data-camera-preview]');
+    const placeholder = field?.querySelector('[data-camera-placeholder]');
+    if (!preview) return;
+
+    preview.src = URL.createObjectURL(file);
+    preview.classList.remove('hidden');
+    placeholder?.classList.add('hidden');
+
+    const remove = field.querySelector('input[name^="remove_"]');
+    if (remove) remove.checked = false;
+};
+
+document.querySelectorAll('[data-camera-field]').forEach((field) => {
+    const input = field.querySelector('[data-camera-input]');
+    const panel = field.querySelector('[data-camera-panel]');
+    const video = field.querySelector('[data-camera-video]');
+    const canvas = field.querySelector('[data-camera-canvas]');
+    const start = field.querySelector('[data-camera-start]');
+    const capture = field.querySelector('[data-camera-capture]');
+    const stop = field.querySelector('[data-camera-stop]');
+    const error = field.querySelector('[data-camera-error]');
+    let stream = null;
+
+    const drawPassportCrop = () => {
+        const targetSize = 900;
+        const videoRatio = video.videoWidth / video.videoHeight;
+        const guideRatio = 1;
+        let sourceW = video.videoWidth;
+        let sourceH = video.videoHeight;
+
+        if (videoRatio > guideRatio) {
+            sourceW = Math.round(video.videoHeight * guideRatio);
+        } else {
+            sourceH = Math.round(video.videoWidth / guideRatio);
+        }
+
+        const sourceX = Math.round((video.videoWidth - sourceW) / 2);
+        const sourceY = Math.round((video.videoHeight - sourceH) / 2);
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, targetSize, targetSize);
+        context.drawImage(video, sourceX, sourceY, sourceW, sourceH, 0, 0, targetSize, targetSize);
+    };
+
+    const showError = (message) => {
+        if (!error) return;
+        error.textContent = message;
+        error.hidden = false;
+    };
+
+    const stopCamera = () => {
+        stream?.getTracks().forEach((track) => track.stop());
+        stream = null;
+        if (video) video.srcObject = null;
+        if (panel) panel.hidden = true;
+        if (capture) capture.hidden = true;
+        if (stop) stop.hidden = true;
+        if (start) start.hidden = false;
+    };
+
+    start?.addEventListener('click', async () => {
+        error.hidden = true;
+        if (!navigator.mediaDevices?.getUserMedia) {
+            showError('Camera is not available in this browser.');
+            return;
+        }
+
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+            video.srcObject = stream;
+            panel.hidden = false;
+            start.hidden = true;
+            capture.hidden = false;
+            stop.hidden = false;
+        } catch (err) {
+            showError('Camera permission was denied or no camera was found.');
+        }
+    });
+
+    capture?.addEventListener('click', () => {
+        if (!stream || !video.videoWidth || !video.videoHeight) {
+            showError('Camera is not ready yet.');
+            return;
+        }
+
+        drawPassportCrop();
+
+        canvas.toBlob((blob) => {
+            if (!blob) {
+                showError('Could not capture the photo.');
+                return;
+            }
+
+            const file = new File([blob], `student-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+            const transfer = new DataTransfer();
+            transfer.items.add(file);
+            input.files = transfer.files;
+            previewSelectedImage(input);
+            stopCamera();
+        }, 'image/jpeg', 0.9);
+    });
+
+    stop?.addEventListener('click', stopCamera);
 });
 
 /** Print job progress: reloads the page when the job finishes. */
