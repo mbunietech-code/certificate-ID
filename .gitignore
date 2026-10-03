@@ -14,7 +14,11 @@
 /.zed
 /auth.json
 /node_modules
-/public/build
+/public/build/*
+!/public/build/assets/
+!/public/build/assets/**
+!/public/build/fonts-manifest.json
+!/public/build/manifest.json
 /public/fonts-manifest.dev.json
 /public/hot
 /public/storage
