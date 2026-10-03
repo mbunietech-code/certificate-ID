@@ -44,7 +44,11 @@
                             <option value="card">PVC card printer</option>
                             <option value="sheet">A4 sheet</option>
                         </select>
-                        <input type="hidden" name="include_back" value="1"><input type="hidden" name="crop_marks" value="1">
+                        <select name="include_back" class="form-input form-input-sm w-36">
+                            <option value="0">Front only</option>
+                            <option value="1">Front + back</option>
+                        </select>
+                        <input type="hidden" name="crop_marks" value="1">
                         <button class="btn btn-primary btn-sm"><x-icon name="printer"/> Reprint selected</button>
                     </div>
                 @endunless

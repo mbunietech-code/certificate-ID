@@ -94,7 +94,12 @@
                         <x-form.input name="margin" type="number" step="0.5" label="Margin mm" value="10"/>
                         <x-form.input name="gap" type="number" step="0.5" label="Gap mm" value="4"/>
                     </div>
-                    <label class="flex items-center gap-2 text-sm"><input type="hidden" name="include_back" value="0"><input type="checkbox" name="include_back" value="1" class="form-check" checked> Print back side (if the template has one)</label>
+                    <fieldset>
+                        <legend class="form-label">Card side</legend>
+                        <label class="flex items-center gap-2 text-sm"><input type="radio" name="include_back" value="0" class="form-check" @checked((string) old('include_back', '0') === '0')> Front side only</label>
+                        <label class="flex items-center gap-2 text-sm"><input type="radio" name="include_back" value="1" class="form-check" @checked((string) old('include_back') === '1')> Front + back side</label>
+                        <p class="form-hint">Use front side only for the first PVC printer test. Back side can be enabled after the artwork is ready.</p>
+                    </fieldset>
                     <label class="flex items-center gap-2 text-sm"><input type="hidden" name="crop_marks" value="0"><input type="checkbox" name="crop_marks" value="1" class="form-check" checked> Crop marks on sheets</label>
                 </div>
             </div>

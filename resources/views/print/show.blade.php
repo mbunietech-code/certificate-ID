@@ -38,6 +38,9 @@
                     <div class="font-semibold text-slate-900">Ready to print – {{ $job->completed_items }} document(s)</div>
                     <div class="text-sm text-slate-500">
                         Layout: {{ $job->isIdCardJob() ? ($job->option('layout') === 'sheet' ? 'cards on '.$job->option('paper', 'A4').' sheets' : 'one card per page (PVC printer)') : 'one certificate per page' }}.
+                        @if ($job->isIdCardJob())
+                            Side: {{ $job->option('include_back') ? 'front + back' : 'front only' }}.
+                        @endif
                         Print at 100% / “Actual size” with no margins. Printed {{ $job->print_count }} time(s).
                     </div>
                 </div>
@@ -60,6 +63,7 @@
                     'Started' => $job->started_at?->format('d/m/Y H:i:s'), 'Finished' => $job->completed_at?->format('d/m/Y H:i:s'),
                     'Generated' => $job->completed_items.' of '.$job->total_items, 'Failed' => (string) $job->failed_items,
                     'Template' => $template?->name ?? $job->template_name, 'IP address' => $job->ip_address,
+                    'Side' => $job->isIdCardJob() ? ($job->option('include_back') ? 'Front + back' : 'Front only') : null,
                     'Last printed' => $job->last_printed_at?->diffForHumans(),
                 ] as $label => $value)
                     @if ($value !== null)<div class="dl-row"><dt>{{ $label }}</dt><dd>{{ $value }}</dd></div>@endif

@@ -9,6 +9,7 @@ use App\Models\PrintJob;
 use App\Models\Staff;
 use App\Models\Student;
 use App\Services\Documents\DocumentData;
+use App\Services\Documents\DocumentPngRenderer;
 use App\Services\Documents\IdCardIssuer;
 use App\Services\Documents\NumberGenerator;
 use App\Services\Documents\PageComposer;
@@ -20,6 +21,7 @@ use Illuminate\Http\Response;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -67,6 +69,20 @@ class IdCardController extends Controller implements HasMiddleware
         $idCard->load(['holder', 'template', 'academicYear', 'school', 'issuer:id,name']);
 
         return view('id-cards.show', ['card' => $idCard]);
+    }
+
+    public function frontPng(IdCard $idCard, DocumentPngRenderer $renderer): Response
+    {
+        $this->authorize('view', $idCard);
+
+        $idCard->load(['holder', 'template', 'academicYear', 'school']);
+        $filename = Str::slug($idCard->card_number).'-front.png';
+
+        return response($renderer->idCardFront($idCard), 200, [
+            'Content-Type' => 'image/png',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'private, max-age=0, must-revalidate',
+        ]);
     }
 
     public function create(Request $request): View

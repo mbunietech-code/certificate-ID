@@ -102,6 +102,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('id-cards/reprint', [IdCardController::class, 'reprint'])->name('id-cards.reprint');
     });
     Route::get('id-cards', [IdCardController::class, 'index'])->name('id-cards.index');
+    Route::get('id-cards/{idCard}/front.png', [IdCardController::class, 'frontPng'])->name('id-cards.front-png');
     Route::get('id-cards/{idCard}', [IdCardController::class, 'show'])->name('id-cards.show');
     Route::post('id-cards/{idCard}/revoke', [IdCardController::class, 'revoke'])->name('id-cards.revoke');
 

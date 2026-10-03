@@ -47,6 +47,9 @@ class IdCardGenerationTest extends TestCase
         // Browser print view and PDF download are logged and counted.
         $this->get(route('print.browser', $job))->assertOk()->assertSee('BNG/2026/0001')->assertSee($students[0]->last_name);
         $this->get(route('print.pdf', $job))->assertOk()->assertHeader('content-type', 'application/pdf');
+        $frontPng = $this->get(route('id-cards.front-png', IdCard::firstOrFail()));
+        $frontPng->assertOk()->assertHeader('content-type', 'image/png');
+        $this->assertStringStartsWith("\x89PNG\r\n\x1a\n", $frontPng->getContent());
         $this->assertSame(2, $job->fresh()->print_count);
         $this->assertDatabaseHas('audit_logs', ['action' => 'print.browser', 'entity_id' => $job->id]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'id_card.generated']);

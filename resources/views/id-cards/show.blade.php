@@ -6,11 +6,12 @@
 @endsection
 @section('actions')
     <a href="{{ $card->verificationUrl() }}" target="_blank" class="btn btn-secondary"><x-icon name="qr"/> Verification page</a>
+    <a href="{{ route('id-cards.front-png', $card) }}" class="btn btn-secondary"><x-icon name="download"/> Download front PNG</a>
     @if ($card->status === 'active')
         @can('print.execute')
             <form method="POST" action="{{ route('id-cards.reprint') }}">
-                @csrf <input type="hidden" name="ids[]" value="{{ $card->id }}"><input type="hidden" name="layout" value="card"><input type="hidden" name="include_back" value="1">
-                <button class="btn btn-primary"><x-icon name="printer"/> Reprint</button>
+                @csrf <input type="hidden" name="ids[]" value="{{ $card->id }}"><input type="hidden" name="layout" value="card"><input type="hidden" name="include_back" value="0">
+                <button class="btn btn-primary"><x-icon name="printer"/> Reprint front</button>
             </form>
         @endcan
     @endif
