@@ -16,6 +16,8 @@
                     hint="Public address encoded in QR codes, e.g. https://ids.example.com. Leave blank to use APP_URL."/>
                 <x-form.input name="queue_threshold" type="number" label="Run jobs in background above (items)" :value="$settings['queue_threshold']" required
                     hint="Smaller jobs are processed right after the request; larger ones need the queue worker."/>
+                <x-form.input name="direct_print_printer" label="Direct printer" :value="$settings['direct_print_printer']" required class="sm:col-span-2"
+                    hint="Windows printer name used by the Direct print button, e.g. EPSON L8050 Series."/>
             </div>
         </div>
 

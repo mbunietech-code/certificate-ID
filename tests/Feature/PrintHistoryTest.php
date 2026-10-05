@@ -7,6 +7,8 @@ use App\Models\Role;
 use App\Models\School;
 use App\Models\Student;
 use App\Services\Documents\NumberGenerator;
+use App\Services\Printing\DirectPrinter;
+use Mockery;
 use Tests\TestCase;
 
 class PrintHistoryTest extends TestCase
@@ -56,5 +58,34 @@ class PrintHistoryTest extends TestCase
         $this->assertSame('BNG/2026/0001', $first);
         $this->assertSame('BNG/2026/0003', $second, 'Numbers already taken are skipped, never duplicated.');
         $this->assertSame('BNG/2027/0001', $nextYear, 'Sequences reset per year.');
+    }
+
+    public function test_completed_job_can_be_sent_to_the_direct_printer(): void
+    {
+        $school = $this->school('BNG');
+        $student = Student::factory()->for($school)->create();
+        $template = $this->idTemplate($school);
+        $printer = $this->userFor($school, Role::PRINTER);
+
+        $this->actingAs($this->userFor($school))->post(route('id-cards.store'), [
+            'template_id' => $template->id,
+            'holder_type' => 'student',
+            'ids' => [$student->id],
+            'mode' => 'new',
+            'layout' => 'card',
+        ]);
+
+        $job = PrintJob::firstOrFail();
+        $directPrinter = Mockery::mock(DirectPrinter::class);
+        $directPrinter->shouldReceive('print')->once()->with(Mockery::type(PrintJob::class));
+        $directPrinter->shouldReceive('printerName')->once()->andReturn('EPSON L8050 Series');
+        $this->instance(DirectPrinter::class, $directPrinter);
+
+        $this->actingAs($printer)->post(route('print.direct', $job))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Sent to EPSON L8050 Series.');
+
+        $this->assertSame(1, $job->fresh()->print_count);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'print.direct', 'entity_id' => $job->id]);
     }
 }

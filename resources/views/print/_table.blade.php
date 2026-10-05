@@ -21,6 +21,10 @@
                 @if ($job->completed_items > 0)
                     @can('print', $job)
                         <a href="{{ route('print.browser', $job) }}" target="_blank" class="btn btn-secondary btn-sm"><x-icon name="printer"/> Print</a>
+                        <form method="POST" action="{{ route('print.direct', $job) }}" class="inline" data-confirm="Send this job directly to {{ setting('direct_print_printer', 'EPSON L8050 Series') }}?">
+                            @csrf
+                            <button class="btn btn-secondary btn-sm"><x-icon name="printer"/> Direct</button>
+                        </form>
                         @if ($job->file_path)<a href="{{ route('print.pdf', $job) }}" class="btn btn-secondary btn-sm"><x-icon name="download"/> PDF</a>@endif
                     @endcan
                 @endif

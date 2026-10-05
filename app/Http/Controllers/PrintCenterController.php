@@ -6,6 +6,7 @@ use App\Models\PrintJob;
 use App\Models\School;
 use App\Models\User;
 use App\Services\Documents\PageComposer;
+use App\Services\Printing\DirectPrinter;
 use App\Services\Printing\PrintJobService;
 use App\Services\TableExporter;
 use Illuminate\Http\JsonResponse;
@@ -14,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 /** Print queue, job detail/progress, browser printing, PDF download and print history. */
@@ -89,6 +91,25 @@ class PrintCenterController extends Controller
         $service->markPrinted($printJob, 'pdf_download');
 
         return $disk->download($printJob->file_path, str_replace('/', '-', $printJob->job_number).'.pdf', ['Content-Type' => 'application/pdf']);
+    }
+
+    public function directPrint(PrintJob $printJob, DirectPrinter $printer, PrintJobService $service): RedirectResponse
+    {
+        $this->authorize('print', $printJob);
+
+        if ($printJob->completed_items === 0) {
+            return back()->with('error', 'This job has no generated documents yet.');
+        }
+
+        try {
+            $printer->print($printJob);
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $service->markPrinted($printJob, 'direct');
+
+        return back()->with('success', "Sent to {$printer->printerName()}.");
     }
 
     /** Re-run failed/stuck jobs (pending items are processed again; done items are kept). */

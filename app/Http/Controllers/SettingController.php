@@ -43,6 +43,7 @@ class SettingController extends Controller
             'default_id_dpi' => ['required', Rule::in(['150', '200', '300', '600'])],
             'default_certificate_paper' => ['required', Rule::in(array_keys(array_filter(CertificateTemplate::PAPER_SIZES)))],
             'default_certificate_orientation' => ['required', Rule::in(['portrait', 'landscape'])],
+            'direct_print_printer' => ['required', 'string', 'max:120'],
             'verification_base_url' => ['nullable', 'url:http,https', 'max:255'],
             'date_format' => ['required', Rule::in(['d/m/Y', 'd-m-Y', 'Y-m-d', 'm/d/Y', 'd M Y', 'j F Y'])],
             'default_student_id_format' => ['required', 'string', 'max:80', $format],

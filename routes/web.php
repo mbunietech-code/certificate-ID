@@ -124,6 +124,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('print-jobs/{printJob}', [PrintCenterController::class, 'show'])->name('print.show');
     Route::get('print-jobs/{printJob}/status', [PrintCenterController::class, 'status'])->name('print.status');
     Route::get('print-jobs/{printJob}/print', [PrintCenterController::class, 'browserPrint'])->name('print.browser');
+    Route::post('print-jobs/{printJob}/direct-print', [PrintCenterController::class, 'directPrint'])->name('print.direct');
     Route::get('print-jobs/{printJob}/pdf', [PrintCenterController::class, 'download'])->name('print.pdf');
     Route::post('print-jobs/{printJob}/retry', [PrintCenterController::class, 'retry'])->name('print.retry');
     Route::post('print-jobs/{printJob}/cancel', [PrintCenterController::class, 'cancel'])->name('print.cancel');

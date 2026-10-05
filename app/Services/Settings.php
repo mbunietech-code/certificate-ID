@@ -21,6 +21,7 @@ class Settings
         'default_id_dpi' => '300',
         'default_certificate_paper' => 'A4',
         'default_certificate_orientation' => 'landscape',
+        'direct_print_printer' => 'EPSON L8050 Series',
         'verification_base_url' => null, // null = APP_URL
         'date_format' => 'd/m/Y',
         'default_student_id_format' => '{CODE}/{YEAR}/{SEQ:4}',

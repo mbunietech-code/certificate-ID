@@ -46,6 +46,10 @@
                 </div>
                 @can('print', $job)
                     <a href="{{ route('print.browser', $job) }}" target="_blank" class="btn btn-primary btn-lg"><x-icon name="printer"/> Print</a>
+                    <form method="POST" action="{{ route('print.direct', $job) }}" data-confirm="Send this job directly to {{ setting('direct_print_printer', 'EPSON L8050 Series') }}?">
+                        @csrf
+                        <button class="btn btn-secondary btn-lg"><x-icon name="printer"/> Direct print</button>
+                    </form>
                     @if ($job->file_path)<a href="{{ route('print.pdf', $job) }}" class="btn btn-secondary btn-lg"><x-icon name="download"/> Download PDF</a>@endif
                 @endcan
             </div>
