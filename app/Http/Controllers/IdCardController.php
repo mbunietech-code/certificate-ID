@@ -95,7 +95,8 @@ class IdCardController extends Controller implements HasMiddleware
             ->orderByRaw('school_id is null')->orderBy('name')->get();
 
         $filters = $request->only($holderType === 'staff' ? StaffController::FILTERS : StudentController::FILTERS);
-        $filters += $holderType === 'student' ? ['status' => 'active'] : ['employment_status' => 'active'];
+        // Students who already collected their ID card are hidden by default, so the list shows who is left.
+        $filters += $holderType === 'student' ? ['status' => 'active', 'id_status' => 'waiting'] : ['employment_status' => 'active'];
         $perPage = in_array((int) $request->query('per_page'), [50, 100, 200, 500], true) ? (int) $request->query('per_page') : 100;
 
         $people = $this->holderQuery($holderType, $filters)

@@ -58,14 +58,55 @@ class StudentImportService
         }
 
         $map = $this->mapHeaders(array_shift($raw));
-        foreach (['admission_number', 'first_name', 'last_name', 'gender', 'class_name'] as $required) {
+        foreach (['first_name', 'last_name', 'gender', 'class_name'] as $required) {
             if (! array_key_exists($required, $map)) {
                 throw ValidationException::withMessages(['file' => 'Missing required column: '.str_replace('_', ' ', $required).'. Download the sample template for the expected headings.']);
             }
         }
 
         $raw = array_values(array_filter($raw, fn ($r) => count(array_filter($r, fn ($v) => trim((string) $v) !== '')) > 0));
-        if (count($raw) > self::MAX_ROWS) {
+        $mappedRows = [];
+        foreach ($raw as $index => $cells) {
+            $rowNumber = $index + 2;
+            $data = [];
+            foreach ($map as $field => $col) {
+                $data[$field] = $this->clean($cells[$col] ?? null);
+            }
+
+            $mappedRows[] = ['row' => $rowNumber, 'data' => $data];
+        }
+
+        return $this->createPreview($mappedRows, mb_substr($file->getClientOriginalName(), 0, 250), $schoolId, $userId, $duplicateMode);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     */
+    public function previewMappedRows(array $rows, string $sourceName, int $schoolId, ?int $userId, string $duplicateMode): StudentImport
+    {
+        $mappedRows = [];
+        foreach (array_values($rows) as $index => $row) {
+            $clean = [];
+            foreach (array_keys(self::COLUMNS) as $field) {
+                $clean[$field] = $this->clean($row[$field] ?? null);
+            }
+
+            $mappedRows[] = ['row' => $index + 1, 'data' => $clean];
+        }
+
+        return $this->createPreview($mappedRows, mb_substr($sourceName, 0, 250), $schoolId, $userId, $duplicateMode);
+    }
+
+    /**
+     * @param  array<int, array{row: int, data: array<string, string|null>}>  $mappedRows
+     */
+    private function createPreview(array $mappedRows, string $sourceName, int $schoolId, ?int $userId, string $duplicateMode): StudentImport
+    {
+        if (count($mappedRows) === 0) {
+            throw ValidationException::withMessages(['file' => 'No student rows were found.']);
+        }
+
+        if (count($mappedRows) > self::MAX_ROWS) {
             throw ValidationException::withMessages(['file' => 'A single import is limited to '.self::MAX_ROWS.' rows. Split the file and import in parts.']);
         }
 
@@ -75,22 +116,20 @@ class StudentImportService
 
         $rows = [];
         $seen = [];
-        foreach ($raw as $index => $cells) {
-            $rowNumber = $index + 2;
-            $data = [];
-            foreach ($map as $field => $col) {
-                $data[$field] = $this->clean($cells[$col] ?? null);
-            }
-
-            [$normalized, $errors] = $this->validateRow($data, $years->all(), $currentYear);
+        foreach ($mappedRows as $incoming) {
+            $rowNumber = $incoming['row'];
+            [$normalized, $errors] = $this->validateRow($incoming['data'], $years->all(), $currentYear);
             $key = mb_strtolower((string) ($normalized['admission_number'] ?? ''));
             $status = $errors ? 'invalid' : 'valid';
             $existingId = null;
 
-            if ($key !== '' && isset($seen[$key])) {
-                $errors[] = "Duplicate admission number in file (also on row {$seen[$key]}).";
-                $status = 'invalid';
-            } elseif ($key !== '') {
+            // Students without an admission number all share the placeholder, so they are always new records.
+            if ($key === Student::NO_ADMISSION_NUMBER) {
+                $key = '';
+            }
+
+            // Admission numbers are not unique: a number repeated in the file is another new student.
+            if ($key !== '' && ! isset($seen[$key])) {
                 $seen[$key] = $rowNumber;
                 if (! $errors && isset($existing[$key])) {
                     $status = 'duplicate';
@@ -105,7 +144,7 @@ class StudentImportService
         $import->forceFill([
             'school_id' => $schoolId,
             'user_id' => $userId,
-            'original_name' => mb_substr($file->getClientOriginalName(), 0, 250),
+            'original_name' => $sourceName,
             'status' => 'preview',
             'duplicate_mode' => $duplicateMode,
             'rows' => $rows,
@@ -121,6 +160,7 @@ class StudentImportService
         $result = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'invalid' => 0];
 
         DB::transaction(function () use ($import, &$result) {
+            $createdNumbers = [];
             foreach (array_chunk($import->rows, 200) as $chunk) {
                 foreach ($chunk as $row) {
                     if ($row['status'] === 'invalid') {
@@ -130,8 +170,12 @@ class StudentImportService
                     }
 
                     $attributes = collect($row['data'])->except('academic_year')->all();
-                    // Re-check: a student may have been added since the preview.
-                    $student = Student::withTrashed()->forSchool($import->school_id)->where('admission_number', $attributes['admission_number'])->first();
+                    $number = mb_strtolower((string) $attributes['admission_number']);
+                    // Re-check: a student may have been added since the preview. Placeholder numbers and
+                    // numbers repeated within this file always create new students.
+                    $student = $number === Student::NO_ADMISSION_NUMBER || isset($createdNumbers[$number])
+                        ? null
+                        : Student::withTrashed()->forSchool($import->school_id)->where('admission_number', $attributes['admission_number'])->first();
 
                     if ($student) {
                         if ($import->duplicate_mode !== 'update') {
@@ -149,6 +193,7 @@ class StudentImportService
                         $student = new Student($attributes + ['status' => 'active']);
                         $student->school_id = $import->school_id;
                         $student->save();
+                        $createdNumbers[$number] = true;
                         $result['created']++;
                     }
                 }
@@ -190,6 +235,8 @@ class StudentImportService
             }
             $data['date_of_birth'] = $date;
         }
+
+        $data['admission_number'] = trim((string) ($data['admission_number'] ?? '')) ?: Student::NO_ADMISSION_NUMBER;
 
         $data['academic_year_id'] = $currentYear;
         if (! empty($data['academic_year'])) {

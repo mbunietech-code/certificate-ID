@@ -127,8 +127,8 @@ class SchoolIsolationTest extends TestCase
         // Another school's ids never reach the database through a mass-assigned school_id.
         $this->post(route('students.store'), [
             'school_id' => $them['school']->id, 'admission_number' => 'X-1', 'first_name' => 'A', 'last_name' => 'B',
-            'gender' => 'male', 'class_name' => 'Form I', 'status' => 'active',
-        ])->assertRedirect();
+            'gender' => 'male', 'level' => 'O-Level', 'class_name' => 'Form I', 'status' => 'active',
+        ])->assertRedirect()->assertSessionHasNoErrors();
         $this->assertSame($me['school']->id, Student::withoutGlobalScopes()->where('admission_number', 'X-1')->value('school_id'));
 
         // Nothing of the other school changed.

@@ -8,6 +8,8 @@ use App\Models\School;
 use App\Models\Student;
 use App\Services\Documents\NumberGenerator;
 use App\Services\Printing\DirectPrinter;
+use App\Services\Printing\PrintJobService;
+use Illuminate\Support\Facades\Storage;
 use Mockery;
 use Tests\TestCase;
 
@@ -77,7 +79,7 @@ class PrintHistoryTest extends TestCase
 
         $job = PrintJob::firstOrFail();
         $directPrinter = Mockery::mock(DirectPrinter::class);
-        $directPrinter->shouldReceive('print')->once()->with(Mockery::type(PrintJob::class));
+        $directPrinter->shouldReceive('print')->once()->with(Mockery::type(PrintJob::class), 'both');
         $directPrinter->shouldReceive('printerName')->once()->andReturn('EPSON L8050 Series');
         $this->instance(DirectPrinter::class, $directPrinter);
 
@@ -87,5 +89,38 @@ class PrintHistoryTest extends TestCase
 
         $this->assertSame(1, $job->fresh()->print_count);
         $this->assertDatabaseHas('audit_logs', ['action' => 'print.direct', 'entity_id' => $job->id]);
+    }
+
+    public function test_two_sided_cards_print_all_fronts_then_all_backs_for_pvc_trays(): void
+    {
+        $school = $this->school('BWM');
+        $students = Student::factory()->count(3)->for($school)->create();
+        $template = $this->idTemplate($school);
+        $this->actingAs($this->userFor($school))->post(route('id-cards.store'), [
+            'template_id' => $template->id, 'holder_type' => 'student', 'ids' => $students->pluck('id')->all(),
+            'mode' => 'new', 'layout' => 'card', 'include_back' => 1,
+        ]);
+        $job = PrintJob::firstOrFail();
+        $pageCount = fn (string $path) => preg_match_all('#/Type\s*/Page[^s]#', Storage::disk('local')->get($path));
+
+        // The background job builds the full PDF plus separate fronts and backs PDFs.
+        $service = app(PrintJobService::class);
+        $this->assertSame(6, $pageCount($service->pdfPath($job)));
+        $this->assertSame(3, $pageCount($service->pdfPath($job, 'front')));
+        $this->assertSame(3, $pageCount($service->pdfPath($job, 'back')));
+
+        $this->get(route('print.show', $job))->assertOk()->assertSee('Print all FRONTS')->assertSee('Print all BACKS');
+        $this->get(route('print.browser', [$job, 'sides' => 'back']))->assertOk()
+            ->assertSee('data-png-name="card-1-back"', false)->assertDontSee('data-png-name="card-1-front"', false);
+        $this->get(route('print.pdf', [$job, 'sides' => 'front']))->assertOk()
+            ->assertDownload(str_replace('/', '-', $job->job_number).'-fronts.pdf');
+
+        $directPrinter = Mockery::mock(DirectPrinter::class);
+        $directPrinter->shouldReceive('print')->once()->with(Mockery::type(PrintJob::class), 'front');
+        $directPrinter->shouldReceive('printerName')->andReturn('EPSON L8050 Series');
+        $this->instance(DirectPrinter::class, $directPrinter);
+
+        $this->post(route('print.direct', $job), ['sides' => 'front'])->assertRedirect()
+            ->assertSessionHas('success', fn (string $message) => str_contains($message, 'flip the cards'));
     }
 }

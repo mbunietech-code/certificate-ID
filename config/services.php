@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    'smart_school' => [
+        'endpoint_token' => env('ID_SYNC_TOKEN'),
+        'db_connection' => env('SMART_SCHOOL_DB_CONNECTION', 'mysql'),
+        'db_host' => env('SMART_SCHOOL_DB_HOST', '127.0.0.1'),
+        'db_port' => env('SMART_SCHOOL_DB_PORT', '3306'),
+        'db_database' => env('SMART_SCHOOL_DB_DATABASE', 'school'),
+        'db_username' => env('SMART_SCHOOL_DB_USERNAME', 'root'),
+        'db_password' => env('SMART_SCHOOL_DB_PASSWORD', ''),
+        'db_socket' => env('SMART_SCHOOL_DB_SOCKET', ''),
+    ],
+
 ];

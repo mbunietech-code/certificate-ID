@@ -66,10 +66,12 @@ Route::middleware(['auth', 'active'])->group(function () {
     // Students (+ import / export / bulk)
     Route::get('students/export', [StudentController::class, 'export'])->name('students.export');
     Route::post('students/bulk', [StudentController::class, 'bulk'])->name('students.bulk');
+    Route::post('students/{student}/id-taken', [StudentController::class, 'markIdTaken'])->name('students.id-taken');
     Route::get('students/import/template', [StudentImportController::class, 'template'])->name('students.import.template');
     Route::middleware('school.selected')->group(function () {
         Route::get('students/import', [StudentImportController::class, 'create'])->name('students.import');
         Route::post('students/import', [StudentImportController::class, 'store'])->name('students.import.store');
+        Route::post('students/import/smart-school', [StudentImportController::class, 'smartSchool'])->name('students.import.smart-school');
     });
     Route::get('students/import/{import}', [StudentImportController::class, 'show'])->name('students.import.show');
     Route::post('students/import/{import}/confirm', [StudentImportController::class, 'confirm'])->name('students.import.confirm');

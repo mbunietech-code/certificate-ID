@@ -55,6 +55,22 @@ class IdCardGenerationTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'id_card.generated']);
     }
 
+    public function test_generate_page_hides_students_who_already_took_their_id_by_default(): void
+    {
+        $school = $this->school('BNG');
+        $waiting = Student::factory()->for($school)->create(['admission_number' => 'WAITING-1']);
+        $taken = Student::factory()->for($school)->create(['admission_number' => 'TAKEN-1']);
+        $taken->markIdTaken(true, null);
+        $this->actingAs($this->userFor($school));
+
+        $this->get(route('id-cards.generate'))->assertOk()
+            ->assertSee($waiting->admission_number)->assertDontSee($taken->admission_number)
+            ->assertSee('1 still waiting for their ID');
+
+        $this->get(route('id-cards.generate', ['id_status' => '']))->assertOk()
+            ->assertSee($waiting->admission_number)->assertSee($taken->admission_number);
+    }
+
     public function test_reuse_mode_reprints_existing_numbers_and_new_mode_replaces_them(): void
     {
         $school = $this->school('BNG');
@@ -107,7 +123,11 @@ class IdCardGenerationTest extends TestCase
 
         $this->actingAs($this->userFor($school))->post(route('id-cards.preview'), [
             'template_id' => $template->id, 'holder_type' => 'student', 'ids' => $students->pluck('id')->all(), 'mode' => 'reuse', 'layout' => 'card',
-        ])->assertOk()->assertSee($students[0]->last_name)->assertSee('BNG/2026/0001');
+            'include_back' => 1,
+        ])->assertOk()->assertSee($students[0]->last_name)->assertSee('BNG/2026/0001')
+            // High-quality PNG download, one file per card side with a readable name.
+            ->assertSee('Download PNG')->assertSee('PNG 600 DPI')
+            ->assertSee('data-png-name="card-1-front"', false)->assertSee('data-png-name="card-2-back"', false);
 
         $this->assertSame(0, IdCard::count());
         $this->assertSame(0, PrintJob::count());

@@ -54,6 +54,38 @@
                 @endcan
             </div>
         </div>
+
+        @if ($twoSidedCards)
+            @can('print', $job)
+                @php $printerName = setting('direct_print_printer', 'EPSON L8050 Series'); @endphp
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h2 class="card-title">PVC card printer (Epson L8050 card tray): fronts first, then backs</h2>
+                        <span class="text-xs text-slate-500">The tray holds 2 cards per run · Paper Source <strong>Disc/ID Card Tray</strong> · Paper Type <strong>PVC ID Card (Borderless)</strong></span>
+                    </div>
+                    <div class="card-body grid gap-4 md:grid-cols-2">
+                        @foreach (['front' => ['1', 'Print all FRONTS', 'Put blank cards in slots 1 and 2, printable side up. Insert the tray when the printer light comes on and press the start button.'],
+                                   'back' => ['2', 'Print all BACKS', 'Flip the printed cards over (front side down) and put them back in the same slots, same order. Then print the backs.']] as $side => [$step, $label, $help])
+                            <div class="rounded-lg border border-slate-200 p-4">
+                                <div class="mb-1 flex items-center gap-2">
+                                    <span class="grid size-7 place-items-center rounded-full bg-blue-700 text-sm font-bold text-white">{{ $step }}</span>
+                                    <span class="font-semibold text-slate-900">{{ $label }} ({{ $job->completed_items }} cards)</span>
+                                </div>
+                                <p class="mb-3 text-sm text-slate-500">{{ $help }}</p>
+                                <div class="flex flex-wrap gap-2">
+                                    <form method="POST" action="{{ route('print.direct', $job) }}" data-confirm="Send the {{ $side === 'front' ? 'fronts' : 'backs' }} to {{ $printerName }}?">
+                                        @csrf <input type="hidden" name="sides" value="{{ $side }}">
+                                        <button class="btn btn-primary"><x-icon name="printer"/> Direct print {{ $side === 'front' ? 'fronts' : 'backs' }}</button>
+                                    </form>
+                                    <a href="{{ route('print.browser', [$job, 'sides' => $side]) }}" target="_blank" class="btn btn-secondary">Print from browser</a>
+                                    <a href="{{ route('print.pdf', [$job, 'sides' => $side]) }}" class="btn btn-secondary"><x-icon name="download"/> PDF</a>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endcan
+        @endif
     @else
         <div class="alert alert-error mb-4">This job {{ $job->status }}. {{ $job->error_message }}</div>
     @endif

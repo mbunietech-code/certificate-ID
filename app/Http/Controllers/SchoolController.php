@@ -8,6 +8,7 @@ use App\Models\IdCard;
 use App\Models\PrintJob;
 use App\Models\Role;
 use App\Models\School;
+use App\Models\Student;
 use App\Models\User;
 use App\Services\Documents\NumberGenerator;
 use App\Services\ImageService;
@@ -105,6 +106,8 @@ class SchoolController extends Controller
         $years = AcademicYear::forSchool($school->id)->orderByDesc('name')->get();
         $counts = [
             'id_cards' => IdCard::forSchool($school->id)->count(),
+            // Includes IDs marked "Taken" even when they were printed without a card record (e.g. PNG download).
+            'ids_printed' => Student::forSchool($school->id)->idPrinted()->count(),
             'certificates' => Certificate::forSchool($school->id)->count(),
             'print_jobs' => PrintJob::forSchool($school->id)->count(),
         ];
@@ -177,6 +180,10 @@ class SchoolController extends Controller
             'student_id_format' => ['required', 'string', 'max:80', $format],
             'staff_id_format' => ['required', 'string', 'max:80', $format],
             'certificate_number_format' => ['required', 'string', 'max:80', $format],
+            'smart_school_source' => ['nullable', Rule::in(School::SMART_SCHOOL_SOURCES)],
+            'smart_school_endpoint_url' => ['nullable', 'required_if:smart_school_source,api', 'url', 'max:500'],
+            'smart_school_api_token' => ['nullable', 'string', 'max:1000'],
+            'smart_school_database' => ['nullable', 'string', 'max:100'],
             'logo' => ['nullable', ...ImageService::UPLOAD_RULES],
             'principal_signature' => ['nullable', ...ImageService::UPLOAD_RULES],
             'school_stamp' => ['nullable', ...ImageService::UPLOAD_RULES],
@@ -188,11 +195,25 @@ class SchoolController extends Controller
     /** @param  array<string, mixed>  $data */
     public static function attributes(array $data): array
     {
-        return collect($data)->only([
+        $attributes = collect($data)->only([
             'name', 'short_name', 'registration_number', 'address', 'region', 'district', 'ward', 'phone', 'email',
             'website', 'principal_name', 'primary_color', 'secondary_color', 'student_id_format', 'staff_id_format',
-            'certificate_number_format',
+            'certificate_number_format', 'smart_school_source', 'smart_school_endpoint_url', 'smart_school_database',
         ])->all();
+
+        if (array_key_exists('smart_school_api_token', $data) && filled($data['smart_school_api_token'])) {
+            $attributes['smart_school_api_token'] = $data['smart_school_api_token'];
+        }
+
+        if (($attributes['smart_school_source'] ?? null) !== 'api') {
+            $attributes['smart_school_endpoint_url'] = null;
+        }
+
+        if (($attributes['smart_school_source'] ?? null) !== 'database') {
+            $attributes['smart_school_database'] = null;
+        }
+
+        return $attributes;
     }
 
     /** Store/replace/remove the logo, signature and stamp (transparent PNGs). */

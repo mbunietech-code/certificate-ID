@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AcademicYear;
+use App\Models\School;
 use App\Models\Student;
 use App\Services\ImageService;
 use App\Services\TableExporter;
@@ -17,7 +18,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class StudentController extends Controller implements HasMiddleware
 {
-    public const FILTERS = ['search', 'level', 'class_name', 'stream', 'gender', 'academic_year_id', 'status'];
+    public const FILTERS = ['search', 'level', 'class_name', 'stream', 'gender', 'academic_year_id', 'status', 'id_status'];
 
     public static function middleware(): array
     {
@@ -33,12 +34,24 @@ class StudentController extends Controller implements HasMiddleware
 
         $students = Student::query()
             ->filter($filters)
-            ->with(['academicYear:id,name', 'school:id,school_code'])
-            ->orderBy('class_name')->orderBy('stream')->orderBy('last_name')->orderBy('first_name')
+            ->with(['academicYear:id,name', 'school:id,school_code', 'idTakenBy:id,name'])
+            // Whether an active ID card has already been printed (ready to hand over).
+            ->withCount(['idCards as printed_cards_count' => fn ($q) => $q->where('status', 'active')->where('print_count', '>', 0)])
+            // Students still waiting for their ID card first, those who took it last;
+            // within each group the most recently registered or edited student comes first.
+            ->orderByRaw('id_taken_at is not null')
+            ->orderByDesc('updated_at')->orderByDesc('id')
             ->paginate($perPage)
             ->withQueryString();
 
-        return view('students.index', ['students' => $students, 'filters' => $filters] + self::filterOptions());
+        // Tab counts use every other filter, so they match what each tab will show.
+        $otherFilters = array_diff_key($filters, ['id_status' => true]);
+        $idCounts = [
+            'waiting' => Student::query()->filter($otherFilters + ['id_status' => 'waiting'])->count(),
+            'taken' => Student::query()->filter($otherFilters + ['id_status' => 'taken'])->count(),
+        ];
+
+        return view('students.index', ['students' => $students, 'filters' => $filters, 'idCounts' => $idCounts] + self::filterOptions());
     }
 
     public function create(): View
@@ -61,7 +74,7 @@ class StudentController extends Controller implements HasMiddleware
         $student = DB::transaction(function () use ($data, $request, $images, $schoolId) {
             $student = Student::create(collect($data)->except('photo')->all());
             if ($request->hasFile('photo')) {
-                $student->forceFill(['photo_path' => $images->store($request->file('photo'), "students/{$schoolId}", 600)])->save();
+                $student->forceFill(['photo_path' => $images->storePassportPhoto($request->file('photo'), "students/{$schoolId}")])->save();
             }
 
             return $student;
@@ -96,13 +109,13 @@ class StudentController extends Controller implements HasMiddleware
     {
         $this->authorize('update', $student);
 
-        $data = $this->validated($request, $student->school_id, $student->id);
+        $data = $this->validated($request, $student->school_id);
         $student->fill(collect($data)->except('photo')->all());
         $changes = array_keys($student->getDirty());
 
         if ($request->hasFile('photo')) {
             $old = $student->photo_path;
-            $student->photo_path = $images->store($request->file('photo'), "students/{$student->school_id}", 600);
+            $student->photo_path = $images->storePassportPhoto($request->file('photo'), "students/{$student->school_id}");
             $images->delete($old);
             $changes[] = 'photo';
         } elseif ($request->boolean('remove_photo')) {
@@ -139,26 +152,47 @@ class StudentController extends Controller implements HasMiddleware
     }
 
     /** Bulk status change / delete for the selected students of the current page. */
+    /** "Taken" button: the printed ID card was collected, so the student leaves the "Waiting for ID" list. */
+    public function markIdTaken(Request $request, Student $student): RedirectResponse
+    {
+        $this->authorize('markIdTaken', $student);
+
+        $taken = $request->boolean('taken', true);
+        $student->markIdTaken($taken, $request->user()->id);
+        $this->audit($taken ? 'student.id_taken' : 'student.id_not_taken', $student,
+            ($taken ? 'ID card taken by ' : 'ID card marked not taken for ').$student->full_name);
+
+        return back()->with('success', $taken
+            ? "{$student->full_name}: ID card marked as taken."
+            : "{$student->full_name} is back in the waiting list.");
+    }
+
     public function bulk(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'ids' => ['required', 'array', 'max:500'],
             'ids.*' => ['integer'],
-            'action' => ['required', Rule::in(['activate', 'deactivate', 'graduate', 'delete'])],
+            'action' => ['required', Rule::in(['activate', 'deactivate', 'graduate', 'delete', 'id_taken', 'id_waiting'])],
         ]);
 
         // Tenant scope drops ids of other schools silently.
         $students = Student::whereIn('id', $data['ids'])->get();
-        $ability = $data['action'] === 'delete' ? 'delete' : 'update';
+        $ability = match ($data['action']) {
+            'delete' => 'delete',
+            'id_taken', 'id_waiting' => 'markIdTaken',
+            default => 'update',
+        };
         $students->each(fn ($s) => $this->authorize($ability, $s));
 
-        DB::transaction(function () use ($students, $data) {
+        DB::transaction(function () use ($students, $data, $request) {
             foreach ($students as $student) {
                 match ($data['action']) {
                     'delete' => $student->delete(),
                     'activate' => $student->update(['status' => 'active']),
                     'deactivate' => $student->update(['status' => 'inactive']),
                     'graduate' => $student->update(['status' => 'graduated']),
+                    'id_taken' => $student->markIdTaken(true, $request->user()->id),
+                    'id_waiting' => $student->markIdTaken(false, $request->user()->id),
                 };
             }
         });
@@ -173,7 +207,12 @@ class StudentController extends Controller implements HasMiddleware
         $this->authorize('students.export');
 
         $format = in_array($request->query('format'), TableExporter::FORMATS, true) ? $request->query('format') : 'csv';
-        $query = Student::query()->filter($request->only(self::FILTERS))->with(['academicYear:id,name', 'school:id,school_code'])
+        // Students ticked in the list; without a selection everyone matching the filters is exported.
+        $ids = $request->validate(['ids' => ['nullable', 'array', 'max:1000'], 'ids.*' => ['integer']])['ids'] ?? [];
+        $filters = $ids ? array_filter(['status' => $request->query('status') === 'deleted' ? 'deleted' : null]) : $request->only(self::FILTERS);
+        $query = Student::query()->filter($filters)
+            ->when($ids, fn ($q) => $q->whereIn('id', $ids))
+            ->with(['academicYear:id,name', 'school:id,school_code'])
             ->orderBy('class_name')->orderBy('stream')->orderBy('last_name');
 
         $rows = (function () use ($query) {
@@ -184,7 +223,7 @@ class StudentController extends Controller implements HasMiddleware
             }
         })();
 
-        $this->audit('student.exported', null, "Exported students ({$format})", ['filters' => $request->only(self::FILTERS)]);
+        $this->audit('student.exported', null, "Exported students ({$format})", $ids ? ['ids' => $ids] : ['filters' => $request->only(self::FILTERS)]);
 
         return $exporter->download($format, 'students-'.now()->format('Ymd-His'), 'Students', [
             'School', 'Admission Number', 'First Name', 'Middle Name', 'Last Name', 'Gender', 'Date of Birth', 'Nationality',
@@ -204,21 +243,23 @@ class StudentController extends Controller implements HasMiddleware
     }
 
     /** @return array<string, mixed> */
-    private function validated(Request $request, int $schoolId, ?int $ignoreId = null): array
+    private function validated(Request $request, int $schoolId): array
     {
-        return $request->validate([
-            'admission_number' => ['required', 'string', 'max:40',
-                Rule::unique('students')->where('school_id', $schoolId)->ignore($ignoreId)],
+        $isBenja = $this->isBenjaSchool($schoolId);
+
+        // Admission numbers are not unique (students without one share "11111"); blank means "none".
+        $data = $request->validate([
+            'admission_number' => ['nullable', 'string', 'max:40'],
             'first_name' => ['required', 'string', 'max:60'],
             'middle_name' => ['nullable', 'string', 'max:60'],
             'last_name' => ['required', 'string', 'max:60'],
             'gender' => ['required', Rule::in(Student::GENDERS)],
             'date_of_birth' => ['nullable', 'date', 'before:today', 'after:1900-01-01'],
             'nationality' => ['nullable', 'string', 'max:60'],
-            'level' => ['nullable', 'string', 'max:20'],
-            'class_name' => ['required', 'string', 'max:40'],
+            'level' => array_values(array_filter([$isBenja ? 'required' : 'nullable', 'string', 'max:20', $isBenja ? Rule::in(Student::LEVELS) : null])),
+            'class_name' => [$isBenja ? 'required_if:level,A-Level' : 'required', 'nullable', 'string', 'max:40'],
             'stream' => ['nullable', 'string', 'max:30'],
-            'combination' => ['nullable', 'string', 'max:40'],
+            'combination' => [$isBenja && $request->input('level') === 'A-Level' ? 'required' : 'nullable', 'string', 'max:40'],
             'entry_year' => ['nullable', 'integer', 'min:1950', 'max:2100'],
             'completion_year' => ['nullable', 'integer', 'min:1950', 'max:2100', 'gte:entry_year'],
             'academic_year_id' => ['nullable', 'integer', Rule::exists('academic_years', 'id')->where('school_id', $schoolId)],
@@ -228,8 +269,36 @@ class StudentController extends Controller implements HasMiddleware
             'address' => ['nullable', 'string', 'max:255'],
             'status' => ['required', Rule::in(Student::STATUSES)],
             'photo' => ['nullable', ...ImageService::UPLOAD_RULES],
-        ], [
-            'admission_number.unique' => 'This admission number already exists in this school (it may be a deleted student – check the "Deleted" filter).',
         ]);
+
+        $data['admission_number'] = trim((string) ($data['admission_number'] ?? '')) ?: Student::NO_ADMISSION_NUMBER;
+
+        if ($isBenja) {
+            $data['date_of_birth'] = null;
+            $data['nationality'] = null;
+            $data['stream'] = null;
+            $data['parent_name'] = null;
+            $data['parent_phone'] = null;
+            $data['student_phone'] = null;
+            $data['address'] = null;
+
+            if ($data['level'] === 'O-Level') {
+                // O-Level has no individual class: the ID card shows the whole "Form I - IV" range.
+                $data['class_name'] = Student::O_LEVEL_CLASS;
+                $data['combination'] = null;
+            } else {
+                validator($data, [
+                    'class_name' => [Rule::in(Student::A_LEVEL_CLASSES)],
+                    'combination' => [Rule::in(Student::A_LEVEL_COMBINATIONS)],
+                ])->validate();
+            }
+        }
+
+        return $data;
+    }
+
+    private function isBenjaSchool(int $schoolId): bool
+    {
+        return (bool) School::withoutGlobalScope('school')->find($schoolId)?->usesBenjaStudentForm();
     }
 }

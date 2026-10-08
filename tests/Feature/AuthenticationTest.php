@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Role;
 use App\Models\User;
+use Illuminate\Session\TokenMismatchException;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -13,6 +15,18 @@ class AuthenticationTest extends TestCase
         $this->get(route('dashboard'))->assertRedirect(route('login'));
         $this->get(route('students.index'))->assertRedirect(route('login'));
         $this->get(route('login'))->assertOk()->assertSee('Sign in');
+    }
+
+    public function test_expired_login_form_returns_to_the_login_page_instead_of_page_expired(): void
+    {
+        // CSRF checks are skipped in tests, so simulate the expired token on the login URL.
+        Route::middleware('web')->post('login', fn () => throw new TokenMismatchException);
+
+        $this->from(route('login'))->post('/login', ['email' => 'someone@example.test', 'password' => 'secret'])
+            ->assertRedirect(route('login'))
+            ->assertSessionHasErrors(['email' => 'Your session expired. Please try again.'])
+            ->assertSessionHasInput('email', 'someone@example.test')
+            ->assertSessionMissing('_old_input.password');
     }
 
     public function test_users_can_sign_in_and_out_and_it_is_audited(): void

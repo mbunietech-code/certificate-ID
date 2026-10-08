@@ -83,6 +83,12 @@ class TableExporter
             $limited[] = $row;
         }
 
+        // A PDF page is narrow: leave out columns that are empty for every row (e.g. unused contact fields).
+        $usedColumns = array_values(array_filter(array_keys($headers), fn (int $i) => $limited === []
+            || collect($limited)->contains(fn (array $row) => ($row[$i] ?? null) !== null && $row[$i] !== '')));
+        $headers = array_map(fn (int $i) => $headers[$i], $usedColumns);
+        $limited = array_map(fn (array $row) => array_map(fn (int $i) => $row[$i] ?? null, $usedColumns), $limited);
+
         $html = view('exports.table-pdf', ['title' => $title, 'headers' => $headers, 'rows' => $limited,
             'truncated' => count($limited) >= self::MAX_PDF_ROWS])->render();
 

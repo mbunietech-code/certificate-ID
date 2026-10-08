@@ -7,6 +7,7 @@
  *  - data-menu-toggle  : toggle a dropdown / mobile sidebar target
  *  - data-poll-url     : print job progress polling
  *  - data-camera-field : capture an image into a file input
+ *  - data-export-selected : export link that sends only the checked [data-check-item] rows (all rows when none)
  */
 
 document.addEventListener('submit', (e) => {
@@ -26,6 +27,17 @@ document.addEventListener('click', (e) => {
     const dismiss = e.target.closest('[data-dismiss]');
     if (dismiss) {
         dismiss.closest('.alert')?.remove();
+    }
+
+    const exportLink = e.target.closest('a[data-export-selected]');
+    if (exportLink) {
+        const checked = [...document.querySelectorAll('[data-check-item]:checked')];
+        if (checked.length) {
+            e.preventDefault();
+            const url = new URL(exportLink.href);
+            checked.forEach((cb) => url.searchParams.append('ids[]', cb.value));
+            window.location.href = url.toString();
+        }
     }
 
     const toggle = e.target.closest('[data-menu-toggle]');
@@ -54,6 +66,9 @@ document.addEventListener('change', (e) => {
         const count = scope.querySelectorAll('[data-check-item]:checked').length;
         scope.querySelectorAll('[data-selected-count]').forEach((el) => {
             el.textContent = count;
+        });
+        document.querySelectorAll('[data-export-scope]').forEach((el) => {
+            el.textContent = count ? `${count} selected only` : el.dataset.exportScope;
         });
     }
 
@@ -93,31 +108,51 @@ document.querySelectorAll('[data-camera-field]').forEach((field) => {
     const switchCamera = field.querySelector('[data-camera-switch]');
     const stop = field.querySelector('[data-camera-stop]');
     const error = field.querySelector('[data-camera-error]');
+    const nativeCamera = field.querySelector('[data-camera-native]');
     let stream = null;
     let facingMode = 'environment';
 
-    const drawPassportCrop = () => {
-        const targetSize = 900;
-        const videoRatio = video.videoWidth / video.videoHeight;
-        const guideRatio = 1;
-        let sourceW = video.videoWidth;
-        let sourceH = video.videoHeight;
+    // ID photos are 455 × 488 px (the server stores exactly that size); capture at 2× for quality.
+    const drawPassportCrop = (source, width, height) => {
+        const targetWidth = 910;
+        const targetHeight = 976;
+        const sourceRatio = width / height;
+        const guideRatio = 455 / 488;
+        let sourceW = width;
+        let sourceH = height;
 
-        if (videoRatio > guideRatio) {
-            sourceW = Math.round(video.videoHeight * guideRatio);
+        if (sourceRatio > guideRatio) {
+            sourceW = Math.round(height * guideRatio);
         } else {
-            sourceH = Math.round(video.videoWidth / guideRatio);
+            sourceH = Math.round(width / guideRatio);
         }
 
-        const sourceX = Math.round((video.videoWidth - sourceW) / 2);
-        const sourceY = Math.round((video.videoHeight - sourceH) / 2);
-        canvas.width = targetSize;
-        canvas.height = targetSize;
+        const sourceX = Math.round((width - sourceW) / 2);
+        const sourceY = Math.round((height - sourceH) / 2);
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
 
         const context = canvas.getContext('2d');
         context.fillStyle = '#ffffff';
-        context.fillRect(0, 0, targetSize, targetSize);
-        context.drawImage(video, sourceX, sourceY, sourceW, sourceH, 0, 0, targetSize, targetSize);
+        context.fillRect(0, 0, targetWidth, targetHeight);
+        context.drawImage(source, sourceX, sourceY, sourceW, sourceH, 0, 0, targetWidth, targetHeight);
+    };
+
+    // Puts the cropped canvas into the form's file input as a small JPEG.
+    const useCanvasPhoto = (done) => {
+        canvas.toBlob((blob) => {
+            if (!blob) {
+                showError('Could not capture the photo.');
+                return;
+            }
+
+            const file = new File([blob], `student-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+            const transfer = new DataTransfer();
+            transfer.items.add(file);
+            input.files = transfer.files;
+            previewSelectedImage(input);
+            done?.();
+        }, 'image/jpeg', 0.9);
     };
 
     const showError = (message) => {
@@ -139,8 +174,14 @@ document.querySelectorAll('[data-camera-field]').forEach((field) => {
 
     const startCamera = async () => {
         error.hidden = true;
+        // Live camera needs HTTPS (or localhost). On a phone opening the site over the
+        // network (http://192.168…), fall back to the phone's own camera app instead.
         if (!navigator.mediaDevices?.getUserMedia) {
-            showError('Camera is not available in this browser.');
+            if (nativeCamera) {
+                nativeCamera.click();
+            } else {
+                showError('Camera is not available in this browser.');
+            }
             return;
         }
 
@@ -188,21 +229,28 @@ document.querySelectorAll('[data-camera-field]').forEach((field) => {
             return;
         }
 
-        drawPassportCrop();
+        drawPassportCrop(video, video.videoWidth, video.videoHeight);
+        useCanvasPhoto(stopCamera);
+    });
 
-        canvas.toBlob((blob) => {
-            if (!blob) {
-                showError('Could not capture the photo.');
-                return;
-            }
+    // Photo taken with the phone's camera app: crop it to the ID shape and shrink it before upload.
+    nativeCamera?.addEventListener('change', () => {
+        const file = nativeCamera.files?.[0];
+        if (!file) return;
 
-            const file = new File([blob], `student-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
-            const transfer = new DataTransfer();
-            transfer.items.add(file);
-            input.files = transfer.files;
-            previewSelectedImage(input);
-            stopCamera();
-        }, 'image/jpeg', 0.9);
+        const image = new Image();
+        const url = URL.createObjectURL(file);
+        image.onload = () => {
+            drawPassportCrop(image, image.naturalWidth, image.naturalHeight);
+            URL.revokeObjectURL(url);
+            nativeCamera.value = '';
+            useCanvasPhoto();
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(url);
+            showError('Could not read the photo from the camera.');
+        };
+        image.src = url;
     });
 
     stop?.addEventListener('click', stopCamera);

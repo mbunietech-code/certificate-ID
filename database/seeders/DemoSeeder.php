@@ -247,14 +247,20 @@ class DemoSeeder extends Seeder
     /** BWM's own A-Level / O-Level ID cards (systems/benja design) with the school's header photo and watermark. */
     private function bwmTemplates(School $school): void
     {
-        $header = $this->copyAsset('header.jpg', "templates/{$school->id}/bwm-header.jpg");
+        // Colour-enhanced (vivid) versions print strong instead of pale; see ImageService::enhanceColors().
+        $header = $this->copyAsset('header-vivid.jpg', "templates/{$school->id}/bwm-header-vivid.jpg");
         $watermark = $this->copyAsset('watermark.jpg', "templates/{$school->id}/bwm-watermark.jpg");
+        // The school's own finished back design ("If found please return to…"), used as is.
+        $back = $this->copyAsset('back-card-vivid.jpg', "templates/{$school->id}/bwm-back-vivid.jpg");
 
         foreach (['alevel' => 'BWM A-Level Student ID', 'olevel' => 'BWM O-Level Student ID'] as $variant => $name) {
+            $design = DesignPresets::photoHeader($variant, $header, $watermark);
+            $design['back'] = DesignPresets::imageSide($back);
+
             IdCardTemplate::firstOrCreate(['name' => $name], [
                 'type' => IdCardTemplate::TYPE_STUDENT, 'width_mm' => IdCardTemplate::CR80_WIDTH, 'height_mm' => IdCardTemplate::CR80_HEIGHT,
                 'orientation' => 'landscape', 'dpi' => 300, 'has_back' => true, 'status' => 'active', 'is_default' => $variant === 'alevel',
-                'design_json' => DesignPresets::photoHeader($variant, $header, $watermark),
+                'design_json' => $design,
             ]);
         }
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\StudentImport;
+use App\Services\SmartSchool\SmartSchoolStudentImportService;
 use App\Services\StudentImportService;
 use App\Services\TableExporter;
 use Illuminate\Http\RedirectResponse;
@@ -18,8 +19,9 @@ class StudentImportController extends Controller
         $this->authorize('students.import');
 
         $recent = StudentImport::with('user:id,name')->latest('id')->limit(10)->get(['id', 'school_id', 'user_id', 'original_name', 'status', 'summary', 'created_at']);
+        $school = $this->tenant()->school();
 
-        return view('students.import.create', compact('recent'));
+        return view('students.import.create', compact('recent', 'school'));
     }
 
     public function store(Request $request, StudentImportService $service): RedirectResponse
@@ -32,6 +34,22 @@ class StudentImportController extends Controller
         ]);
 
         $import = $service->parse($request->file('file'), $this->tenant()->schoolIdForWrite(), $request->user()->id, $request->input('duplicate_mode'));
+
+        return redirect()->route('students.import.show', $import);
+    }
+
+    public function smartSchool(Request $request, SmartSchoolStudentImportService $service): RedirectResponse
+    {
+        $this->authorize('students.import');
+
+        $data = $request->validate([
+            'duplicate_mode' => ['required', Rule::in(['skip', 'update'])],
+        ]);
+
+        $school = $this->tenant()->school();
+        abort_unless($school, 409, 'Select a school before importing from Smart School.');
+
+        $import = $service->preview($school, $request->user()->id, $data['duplicate_mode']);
 
         return redirect()->route('students.import.show', $import);
     }

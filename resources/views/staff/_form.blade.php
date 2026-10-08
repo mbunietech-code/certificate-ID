@@ -21,7 +21,8 @@
     <div class="card self-start">
         <div class="card-header"><h2 class="card-title">Photo</h2></div>
         <div class="card-body">
-            <x-form.image name="photo" label="Passport photo" :path="$member->photo_path" remove-name="remove_photo" round/>
+            <x-form.image name="photo" label="Passport photo" :path="$member->photo_path" remove-name="remove_photo" round
+                hint="JPG/PNG. Cropped and resized automatically to 455 × 488 px for the ID card."/>
         </div>
     </div>
 </div>

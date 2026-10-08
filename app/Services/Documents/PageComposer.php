@@ -25,7 +25,7 @@ class PageComposer
     /**
      * @param  array<int, DocumentData>  $documents
      * @param  array<string, mixed>  $options  layout, include_back, paper, margin, gap, crop_marks
-     * @return array{width: float, height: float, pages: array<int, array<int, array{x: float, y: float, w: float, h: float, html: string, marks: bool}>>}
+     * @return array{width: float, height: float, pages: array<int, array<int, array{x: float, y: float, w: float, h: float, html: string, marks: bool}>>, labels: array<int, string>}
      */
     public function compose(IdCardTemplate|CertificateTemplate $template, array $documents, array $options, string $mode): array
     {
@@ -34,19 +34,42 @@ class PageComposer
         $sides = $template->sides();
         $withBack = $template instanceof IdCardTemplate && $template->has_back && ($options['include_back'] ?? true);
 
+        // PVC printers without duplex (e.g. Epson L8050 card tray) print all fronts, then all backs.
+        $only = in_array($options['sides'] ?? 'both', ['front', 'back'], true) && $withBack ? $options['sides'] : null;
+        if ($only === 'back') {
+            $sides['front'] = $sides['back'];
+        }
+        if ($only !== null) {
+            $withBack = false;
+        }
+
         if ($template instanceof CertificateTemplate || ($options['layout'] ?? 'card') !== 'sheet') {
             $pages = [];
-            foreach ($documents as $data) {
+            $labels = [];
+            $prefix = $template instanceof CertificateTemplate ? 'certificate' : 'card';
+            foreach (array_values($documents) as $i => $data) {
                 $pages[] = [$this->slot(0, 0, $w, $h, $this->renderer->renderSide($sides['front'], $w, $h, $data, $mode), false)];
+                $labels[] = $prefix.'-'.($i + 1).($withBack ? '-front' : ($only ? "-{$only}" : ''));
                 if ($withBack) {
                     $pages[] = [$this->slot(0, 0, $w, $h, $this->renderer->renderSide($sides['back'], $w, $h, $data, $mode), false)];
+                    $labels[] = $prefix.'-'.($i + 1).'-back';
                 }
             }
 
-            return ['width' => $w, 'height' => $h, 'pages' => $pages];
+            return ['width' => $w, 'height' => $h, 'pages' => $pages, 'labels' => $labels];
         }
 
-        return $this->composeSheets($sides, $w, $h, $documents, $options, $withBack, $mode);
+        if ($only !== 'back') {
+            return $this->composeSheets($sides, $w, $h, $documents, $options, $withBack, $mode);
+        }
+
+        // Back sheets only: keep the column-mirrored back pages so they line up when the stack is flipped.
+        $composed = $this->composeSheets($sides, $w, $h, $documents, $options, true, $mode);
+        $keep = array_keys(array_filter($composed['labels'], fn (string $label) => str_ends_with($label, '-back')));
+        $composed['pages'] = array_values(array_intersect_key($composed['pages'], array_flip($keep)));
+        $composed['labels'] = array_values(array_intersect_key($composed['labels'], array_flip($keep)));
+
+        return $composed;
     }
 
     private function composeSheets(array $sides, float $w, float $h, array $documents, array $options, bool $withBack, string $mode): array
@@ -67,7 +90,8 @@ class PageComposer
         $offY = ($ph - $gridH) / 2;
 
         $pages = [];
-        foreach (array_chunk($documents, $perSheet) as $chunk) {
+        $labels = [];
+        foreach (array_chunk($documents, $perSheet) as $sheet => $chunk) {
             $front = [];
             $back = [];
             foreach ($chunk as $i => $data) {
@@ -81,12 +105,14 @@ class PageComposer
                 }
             }
             $pages[] = $front;
+            $labels[] = 'sheet-'.($sheet + 1).($withBack ? '-front' : '');
             if ($withBack) {
                 $pages[] = $back;
+                $labels[] = 'sheet-'.($sheet + 1).'-back';
             }
         }
 
-        return ['width' => $pw, 'height' => $ph, 'pages' => $pages];
+        return ['width' => $pw, 'height' => $ph, 'pages' => $pages, 'labels' => $labels];
     }
 
     private function slot(float $x, float $y, float $w, float $h, string $html, bool $marks): array

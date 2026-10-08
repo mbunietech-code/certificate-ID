@@ -22,6 +22,7 @@ class DashboardController extends Controller
             'students' => Student::where('status', 'active')->count(),
             'staff' => Staff::where('employment_status', 'active')->count(),
             'id_cards' => IdCard::count(),
+            'ids_printed' => Student::where('status', 'active')->idPrinted()->count(),
             'certificates' => Certificate::count(),
             'pending_jobs' => PrintJob::whereIn('status', ['pending', 'processing'])->count(),
             'completed_jobs' => PrintJob::where('status', 'completed')->count(),

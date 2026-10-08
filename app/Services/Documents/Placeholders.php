@@ -41,6 +41,7 @@ class Placeholders
         'class' => ['Class / Form', 'Form IV'],
         'stream' => ['Stream', 'A'],
         'class_stream' => ['Class + stream', 'Form IV A'],
+        'class_stacked' => ['Class on two lines (Form / I - IV)', "Form\nI - IV"],
         'combination' => ['Combination', 'PCM'],
         'nationality' => ['Nationality', 'Tanzanian'],
         'parent_name' => ['Parent / guardian', 'Juma Hassan'],

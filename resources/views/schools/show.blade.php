@@ -22,9 +22,9 @@
 @endsection
 
 @section('content')
-    <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+    <div class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         @foreach (['Students' => $school->students_count, 'Staff' => $school->staff_count, 'Users' => $school->users_count,
-                   'ID cards' => $counts['id_cards'], 'Certificates' => $counts['certificates'], 'Print jobs' => $counts['print_jobs']] as $label => $value)
+                   'IDs printed' => $counts['ids_printed'], 'ID cards generated' => $counts['id_cards'], 'Certificates' => $counts['certificates'], 'Print jobs' => $counts['print_jobs']] as $label => $value)
             <div class="stat"><div class="stat-label">{{ $label }}</div><div class="stat-value">{{ number_format($value) }}</div></div>
         @endforeach
     </div>

@@ -42,6 +42,12 @@
                     <select name="academic_year_id" class="form-input w-32" data-autosubmit><option value="">All</option>@foreach ($academicYears as $y)<option value="{{ $y->id }}" @selected(($filters['academic_year_id'] ?? '') == $y->id)>{{ $y->name }}</option>@endforeach</select></div>
                 <div><label class="form-label">Status</label>
                     <select name="status" class="form-input w-28" data-autosubmit><option value="">All</option>@foreach (\App\Models\Student::STATUSES as $s)<option value="{{ $s }}" @selected(($filters['status'] ?? '') === $s)>{{ ucfirst($s) }}</option>@endforeach</select></div>
+                <div><label class="form-label">ID card</label>
+                    <select name="id_status" class="form-input w-36" data-autosubmit>
+                        <option value="waiting" @selected(($filters['id_status'] ?? '') === 'waiting')>Not taken yet</option>
+                        <option value="taken" @selected(($filters['id_status'] ?? '') === 'taken')>Taken</option>
+                        <option value="" @selected(($filters['id_status'] ?? '') === '')>All</option>
+                    </select></div>
             @endif
             <div><label class="form-label">Show</label>
                 <select name="per_page" class="form-input w-24" data-autosubmit>@foreach ([50, 100, 200, 500] as $n)<option value="{{ $n }}" @selected((int) request('per_page', 100) === $n)>{{ $n }}</option>@endforeach</select></div>
@@ -108,6 +114,9 @@
         <div class="card min-w-0">
             <div class="card-header">
                 <h2 class="card-title">3. Select {{ $isStaff ? 'staff' : 'students' }} <span class="font-normal text-slate-500">· <span data-selected-count>0</span> selected</span></h2>
+                @if (! $isStaff && ($filters['id_status'] ?? '') === 'waiting')
+                    <span class="badge badge-amber">{{ number_format($totalMatching) }} still waiting for their ID</span>
+                @endif
                 <label class="flex items-center gap-2 rounded bg-blue-50 px-2 py-1 text-sm text-blue-900">
                     <input type="checkbox" name="select_all" value="1" class="form-check"> Select all {{ number_format($totalMatching) }} matching the filters
                 </label>

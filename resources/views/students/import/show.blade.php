@@ -17,6 +17,13 @@
         <a href="?show=invalid" class="stat {{ $filter === 'invalid' ? 'ring-2 ring-blue-500' : '' }}"><div class="stat-label text-red-700">Invalid – not imported</div><div class="stat-value text-red-700">{{ $s['invalid'] }}</div></a>
     </div>
 
+    @if (! empty($s['source']))
+        <div class="alert alert-info mt-4">
+            <x-icon name="refresh" class="mt-0.5 size-4 shrink-0"/>
+            <span>Source: <strong>{{ $s['source'] }}</strong>@if (isset($s['staff_available'])) · Staff available from master: <strong>{{ $s['staff_available'] }}</strong>@endif</span>
+        </div>
+    @endif
+
     @if ($s['invalid'] > 0)
         <div class="alert alert-warning mt-4">
             <x-icon name="ban" class="mt-0.5 size-4 shrink-0"/>

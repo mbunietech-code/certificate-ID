@@ -35,14 +35,19 @@ class PrintCenterController extends Controller
         return view('print.index', compact('active', 'recent'));
     }
 
-    public function show(PrintJob $printJob): View
+    public function show(PrintJob $printJob, PrintJobService $service): View
     {
         $this->authorize('view', $printJob);
 
         $printJob->load(['user:id,name', 'school']);
         $failed = $printJob->items()->where('status', 'failed')->with('subject')->limit(100)->get();
 
-        return view('print.show', ['job' => $printJob, 'failed' => $failed, 'template' => $printJob->template()]);
+        return view('print.show', [
+            'job' => $printJob,
+            'failed' => $failed,
+            'template' => $printJob->template(),
+            'twoSidedCards' => $printJob->status === 'completed' && $service->isTwoSided($printJob) && $printJob->option('layout', 'card') === 'card',
+        ]);
     }
 
     /** Polled by the job page while it is processing. */
@@ -64,7 +69,7 @@ class PrintCenterController extends Controller
     }
 
     /** HTML pages sized exactly to the card/paper for printing from the browser. */
-    public function browserPrint(PrintJob $printJob, PrintJobService $service): Response|RedirectResponse
+    public function browserPrint(Request $request, PrintJob $printJob, PrintJobService $service): Response|RedirectResponse
     {
         $this->authorize('print', $printJob);
 
@@ -72,28 +77,30 @@ class PrintCenterController extends Controller
             return redirect()->route('print.show', $printJob)->with('error', 'This job has no generated documents yet.');
         }
 
-        $composed = $service->compose($printJob, 'web');
+        $sides = $this->sides($request, $printJob, $service);
+        $composed = $service->compose($printJob, 'web', $sides);
         $service->markPrinted($printJob, 'browser');
 
-        return response(app(PageComposer::class)->html($composed, "{$printJob->job_number} – {$printJob->template_name}", 'web', [
+        return response(app(PageComposer::class)->html($composed, "{$printJob->job_number} – {$printJob->template_name}".self::SIDE_TITLES[$sides], 'web', [
             ['label' => '← Back to job', 'url' => route('print.show', $printJob)],
-            ...($printJob->file_path ? [['label' => 'Download PDF', 'url' => route('print.pdf', $printJob)]] : []),
+            ...($printJob->file_path ? [['label' => 'Download PDF', 'url' => route('print.pdf', [$printJob, 'sides' => $sides])]] : []),
         ]));
     }
 
-    public function download(PrintJob $printJob, PrintJobService $service): SymfonyResponse
+    public function download(Request $request, PrintJob $printJob, PrintJobService $service): SymfonyResponse
     {
         $this->authorize('print', $printJob);
 
-        $disk = Storage::disk(PrintJobService::PDF_DISK);
-        abort_unless($printJob->file_path && $disk->exists($printJob->file_path), 404, 'The PDF for this job is not available yet.');
+        abort_unless($printJob->file_path && Storage::disk(PrintJobService::PDF_DISK)->exists($printJob->file_path), 404, 'The PDF for this job is not available yet.');
 
+        $sides = $this->sides($request, $printJob, $service);
+        $path = $service->ensurePdf($printJob, $sides);
         $service->markPrinted($printJob, 'pdf_download');
 
-        return $disk->download($printJob->file_path, str_replace('/', '-', $printJob->job_number).'.pdf', ['Content-Type' => 'application/pdf']);
+        return Storage::disk(PrintJobService::PDF_DISK)->download($path, basename($path), ['Content-Type' => 'application/pdf']);
     }
 
-    public function directPrint(PrintJob $printJob, DirectPrinter $printer, PrintJobService $service): RedirectResponse
+    public function directPrint(Request $request, PrintJob $printJob, DirectPrinter $printer, PrintJobService $service): RedirectResponse
     {
         $this->authorize('print', $printJob);
 
@@ -101,15 +108,31 @@ class PrintCenterController extends Controller
             return back()->with('error', 'This job has no generated documents yet.');
         }
 
+        $sides = $this->sides($request, $printJob, $service);
+
         try {
-            $printer->print($printJob);
+            $printer->print($printJob, $sides);
         } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
 
         $service->markPrinted($printJob, 'direct');
 
-        return back()->with('success', "Sent to {$printer->printerName()}.");
+        return back()->with('success', match ($sides) {
+            'front' => "Fronts sent to {$printer->printerName()}. When they are done, flip the cards (printed side down) in the same slots and print the backs.",
+            'back' => "Backs sent to {$printer->printerName()}.",
+            default => "Sent to {$printer->printerName()}.",
+        });
+    }
+
+    private const SIDE_TITLES = ['both' => '', 'front' => ' – fronts', 'back' => ' – backs'];
+
+    /** Requested side(s): only two-sided card jobs can be split into fronts / backs. */
+    private function sides(Request $request, PrintJob $job, PrintJobService $service): string
+    {
+        $sides = (string) $request->input('sides', 'both');
+
+        return in_array($sides, PrintJobService::SIDES, true) && $service->isTwoSided($job) ? $sides : 'both';
     }
 
     /** Re-run failed/stuck jobs (pending items are processed again; done items are kept). */

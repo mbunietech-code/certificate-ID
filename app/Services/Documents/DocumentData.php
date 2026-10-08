@@ -132,6 +132,7 @@ final class DocumentData
             'class' => (string) $person->class_name,
             'stream' => (string) $person->stream,
             'class_stream' => $person->classLabel(),
+            'class_stacked' => $person->stackedClassLabel(),
             'combination' => (string) $person->combination,
             'nationality' => (string) $person->nationality,
             'parent_name' => (string) $person->parent_name,

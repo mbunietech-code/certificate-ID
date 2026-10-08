@@ -164,7 +164,10 @@ class DesignPresets
             // Details row: four columns separated by black bars
             self::el('rect', 3.45, 36.5, 0.55, 14, $divider),
             self::text(6.4, 37.6, 15.8, 2.4, $firstLabel, 4.85, $label),
-            self::text(6.4, 40.2, 15.8, 2.6, $firstValue, 5.8, $value),
+            // O-Level stacks the class: "Form" on top, "I - IV" below.
+            $variant === 'olevel'
+                ? self::text(6.4, 39.6, 15.8, 4.4, '{class_stacked}', 5.8, ['lineHeight' => 1.0] + $value)
+                : self::text(6.4, 40.2, 15.8, 2.6, $firstValue, 5.8, $value),
             self::text(6.4, 44.5, 15.8, 2.4, 'Year', 4.85, $label),
             self::text(6.4, 47.1, 15.8, 2.6, '{year_range}', 5.8, $value),
             self::el('rect', 22.8, 36.5, 0.55, 14, $divider),
@@ -204,6 +207,17 @@ class DesignPresets
             'front' => ['background' => ['color' => '#ffffff', 'image' => null], 'elements' => $front],
             'back' => ['background' => ['color' => '#ffffff', 'image' => null], 'elements' => $back],
         ];
+    }
+
+    /**
+     * A side that is just a finished artwork image (e.g. a school's own printed card back),
+     * stretched over the whole card. Elements can still be added on top in the designer.
+     *
+     * @return array{background: array{color: string, image: string}, elements: array<int, mixed>}
+     */
+    public static function imageSide(string $image): array
+    {
+        return ['background' => ['color' => '#ffffff', 'image' => $image], 'elements' => []];
     }
 
     private static function staffIdPortrait(): array

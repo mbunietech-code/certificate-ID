@@ -17,13 +17,15 @@
     @php
         $cards = $school
             ? ['Total students' => $stats['students'], 'Total staff' => $stats['staff'], 'IDs generated' => $stats['id_cards'],
+               'IDs printed' => $stats['ids_printed'], 'IDs not printed yet' => max(0, $stats['students'] - $stats['ids_printed']),
                'Certificates generated' => $stats['certificates'], 'Pending print jobs' => $stats['pending_jobs'], 'Completed print jobs' => $stats['completed_jobs']]
             : ['Total schools' => $stats['schools'], 'Active schools' => $stats['active_schools'], 'Total students' => $stats['students'],
-               'Total staff' => $stats['staff'], 'IDs generated' => $stats['id_cards'], 'Certificates' => $stats['certificates'], 'Print jobs' => $stats['print_jobs']];
+               'Total staff' => $stats['staff'], 'IDs generated' => $stats['id_cards'], 'IDs printed' => $stats['ids_printed'],
+               'Certificates' => $stats['certificates'], 'Print jobs' => $stats['print_jobs']];
         $maxDay = max(1, collect($activity)->max(fn ($d) => $d['ids'] + $d['certificates']));
     @endphp
 
-    <div class="grid grid-cols-2 gap-3 md:grid-cols-3 {{ count($cards) > 6 ? 'xl:grid-cols-7' : 'xl:grid-cols-6' }}">
+    <div class="grid grid-cols-2 gap-3 md:grid-cols-3 {{ count($cards) === 8 ? 'xl:grid-cols-4' : (count($cards) > 6 ? 'xl:grid-cols-7' : 'xl:grid-cols-6') }}">
         @foreach ($cards as $label => $value)
             <div class="stat">
                 <div class="stat-label">{{ $label }}</div>

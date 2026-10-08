@@ -16,10 +16,10 @@ class DirectPrinter
         return (string) setting('direct_print_printer', 'EPSON L8050 Series');
     }
 
-    public function print(PrintJob $job): void
+    /** @param  string  $sides  both | front | back — PVC card trays print all fronts, then all backs */
+    public function print(PrintJob $job, string $sides = 'both'): void
     {
-        $disk = Storage::disk(PrintJobService::PDF_DISK);
-        if (! $job->file_path || ! $disk->exists($job->file_path)) {
+        if (! $job->file_path) {
             throw new RuntimeException('The PDF for this job is not available yet.');
         }
 
@@ -28,7 +28,7 @@ class DirectPrinter
         }
 
         $printer = $this->printerName();
-        $path = $disk->path($job->file_path);
+        $path = Storage::disk(PrintJobService::PDF_DISK)->path(app(PrintJobService::class)->ensurePdf($job, $sides));
         $browser = $this->browserPath();
         $defaultPrinter = $this->defaultPrinterName();
         $profile = storage_path('app/direct-print/'.uniqid('', true));
@@ -54,42 +54,63 @@ class DirectPrinter
                 $process->stop(2);
             }
 
-            if ($defaultPrinter) {
-                $this->setDefaultPrinter($defaultPrinter);
+            if ($defaultPrinter && $defaultPrinter !== $printer) {
+                try {
+                    $this->setDefaultPrinter($defaultPrinter);
+                } catch (RuntimeException $e) {
+                    report($e); // The job already printed; restoring the old default is best effort.
+                }
             }
 
             File::deleteDirectory($profile);
         }
     }
 
+    /**
+     * Make $printer the Windows default via WMI (Win32_Printer.SetDefaultPrinter).
+     * Unlike "rundll32 printui.dll /y" this never opens a dialog, so it cannot hang
+     * when "Let Windows manage my default printer" is on. The switch is verified:
+     * if Windows still reports another default printer nothing is printed.
+     */
     private function setDefaultPrinter(string $printer): void
     {
-        $process = new Process(['rundll32', 'printui.dll,PrintUIEntry', '/y', '/n', $printer]);
-        $process->setTimeout(10);
-        $process->run();
+        $output = $this->powershell(
+            '$p = Get-CimInstance Win32_Printer | Where-Object Name -eq $env:TARGET_PRINTER; '
+            .'if (-not $p) { "NOT_FOUND"; exit 0 }; '
+            .'$r = Invoke-CimMethod -InputObject $p -MethodName SetDefaultPrinter; '
+            .'"RESULT=" + $r.ReturnValue',
+            ['TARGET_PRINTER' => $printer],
+        );
 
-        if (! $process->isSuccessful()) {
-            $message = trim($process->getErrorOutput() ?: $process->getOutput());
+        if (str_contains($output, 'NOT_FOUND')) {
+            throw new RuntimeException("Printer '{$printer}' was not found. Check the printer name in System settings (Direct printer).");
+        }
 
-            throw new RuntimeException($message ?: "Printer '{$printer}' was not found or could not be selected. Check the printer name in System settings.");
+        if ($this->defaultPrinterName() !== $printer) {
+            throw new RuntimeException("Windows did not switch the default printer to '{$printer}', so nothing was printed. "
+                .'Turn off "Let Windows manage my default printer" in Windows Settings → Printers & scanners, then try again.');
         }
     }
 
     private function defaultPrinterName(): ?string
     {
-        $process = new Process(['cmd', '/c', 'wmic printer where default=true get name /value']);
-        $process->setTimeout(10);
+        $name = trim($this->powershell('(Get-CimInstance Win32_Printer -Filter "Default=True").Name'));
+
+        return $name !== '' ? $name : null;
+    }
+
+    /** @param  array<string, string>  $env  passed as environment variables (no quoting/injection issues) */
+    private function powershell(string $script, array $env = []): string
+    {
+        $process = new Process(['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', $script], null, $env);
+        $process->setTimeout(30);
         $process->run();
 
         if (! $process->isSuccessful()) {
-            return null;
+            throw new RuntimeException('Windows printer settings could not be read: '.trim($process->getErrorOutput() ?: $process->getOutput()));
         }
 
-        if (preg_match('/^Name=(.+)$/mi', $process->getOutput(), $matches)) {
-            return trim($matches[1]);
-        }
-
-        return null;
+        return $process->getOutput();
     }
 
     private function browserPath(): string

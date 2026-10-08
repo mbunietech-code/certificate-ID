@@ -50,7 +50,7 @@ class StaffController extends Controller implements HasMiddleware
         $data = $this->validated($request, $schoolId);
         $member = Staff::create(collect($data)->except('photo')->all());
         if ($request->hasFile('photo')) {
-            $member->forceFill(['photo_path' => $images->store($request->file('photo'), "staff/{$schoolId}", 600)])->save();
+            $member->forceFill(['photo_path' => $images->storePassportPhoto($request->file('photo'), "staff/{$schoolId}")])->save();
         }
 
         $this->audit('staff.created', $member, "Created staff {$member->full_name} ({$member->employee_number})");
@@ -84,7 +84,7 @@ class StaffController extends Controller implements HasMiddleware
         $changes = array_keys($staff->getDirty());
         if ($request->hasFile('photo')) {
             $old = $staff->photo_path;
-            $staff->photo_path = $images->store($request->file('photo'), "staff/{$staff->school_id}", 600);
+            $staff->photo_path = $images->storePassportPhoto($request->file('photo'), "staff/{$staff->school_id}");
             $images->delete($old);
             $changes[] = 'photo';
         } elseif ($request->boolean('remove_photo')) {

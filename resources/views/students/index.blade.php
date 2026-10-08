@@ -8,9 +8,11 @@
     @can('students.export')
         <div class="relative">
             <button type="button" class="btn btn-secondary" data-menu-toggle="export-menu"><x-icon name="download"/> Export <x-icon name="chevron-down"/></button>
-            <div id="export-menu" data-menu hidden class="absolute right-0 z-10 mt-1 w-36 rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+            <div id="export-menu" data-menu hidden class="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+                {{-- Tick students in the list to export only them; otherwise everyone matching the filters. --}}
+                <p class="border-b border-slate-100 px-3 pb-1.5 pt-1 text-xs text-slate-500" data-export-scope="All {{ number_format($students->total()) }} matching">All {{ number_format($students->total()) }} matching</p>
                 @foreach (['csv' => 'CSV', 'xlsx' => 'Excel (.xlsx)', 'pdf' => 'PDF'] as $format => $label)
-                    <a href="{{ route('students.export', request()->query() + ['format' => $format]) }}" class="block px-3 py-1.5 text-sm hover:bg-slate-50">{{ $label }}</a>
+                    <a href="{{ route('students.export', request()->except(['page', 'per_page', 'ids']) + ['format' => $format]) }}" class="block px-3 py-1.5 text-sm hover:bg-slate-50" data-export-selected>{{ $label }}</a>
                 @endforeach
             </div>
         </div>
@@ -20,8 +22,27 @@
 @endsection
 
 @section('content')
+    @php
+        $idStatus = $filters['id_status'] ?? '';
+        $tabQuery = fn (string $status) => array_filter(request()->except(['page', 'id_status']) + ['id_status' => $status]);
+        $tabs = [
+            'waiting' => ['Waiting for ID', $idCounts['waiting'], 'Not yet taken (printed or not)'],
+            'taken' => ['ID taken', $idCounts['taken'], 'Card collected by the student'],
+            '' => ['All students', $idCounts['waiting'] + $idCounts['taken'], null],
+        ];
+    @endphp
+    <div class="mb-3 flex flex-wrap gap-1">
+        @foreach ($tabs as $key => [$label, $count, $title])
+            <a href="{{ route('students.index', $tabQuery($key)) }}" title="{{ $title }}"
+               class="btn btn-sm {{ $idStatus === $key ? 'btn-primary' : 'btn-secondary' }}">
+                {{ $label }} <span class="rounded-full px-1.5 text-xs tabular-nums {{ $idStatus === $key ? 'bg-white/20' : 'bg-slate-100' }}">{{ number_format($count) }}</span>
+            </a>
+        @endforeach
+    </div>
+
     <div class="card">
         <form method="GET" class="card-header">
+            <input type="hidden" name="id_status" value="{{ $idStatus }}">
             <div class="flex flex-wrap items-center gap-2">
                 <input type="search" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Name or admission no." class="form-input w-56">
                 <select name="level" class="form-input w-32" data-autosubmit>
@@ -60,11 +81,15 @@
 
         <form method="POST" action="{{ route('students.bulk') }}" data-confirm="Apply this action to the selected students?">
             @csrf
-            @canany(['students.update', 'students.delete'])
+            @canany(['students.update', 'students.delete', 'print.execute'])
                 <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm">
                     <span class="text-slate-500"><span data-selected-count>0</span> selected</span>
-                    <select name="action" class="form-input form-input-sm w-44" required>
+                    <select name="action" class="form-input form-input-sm w-48" required>
                         <option value="">Bulk action…</option>
+                        @canany(['students.update', 'print.execute'])
+                            <option value="id_taken">✓ Mark ID taken</option>
+                            <option value="id_waiting">Back to waiting for ID</option>
+                        @endcanany
                         @can('students.update')
                             <option value="activate">Mark active</option>
                             <option value="deactivate">Deactivate</option>
@@ -83,7 +108,7 @@
                     <thead>
                     <tr>
                         <th class="w-8"><input type="checkbox" class="form-check" data-check-all aria-label="Select all"></th>
-                        <th>Student</th><th>Adm. No.</th>@if (tenant()->isAllSchools())<th>School</th>@endif<th>Level</th><th>Class</th><th>Gender</th><th>Year</th><th>Status</th><th></th>
+                        <th>Student</th><th>Adm. No.</th>@if (tenant()->isAllSchools())<th>School</th>@endif<th>Level</th><th>Class</th><th>Gender</th><th>Year</th><th>Status</th><th>ID card</th><th></th>
                     </tr>
                     </thead>
                     <tbody>
@@ -111,6 +136,23 @@
                             <td>{{ ucfirst($student->gender) }}</td>
                             <td>{{ $student->academicYear?->name }}</td>
                             <td><x-status :value="$student->trashed() ? 'deleted' : $student->status"/></td>
+                            <td class="whitespace-nowrap">
+                                @if ($student->hasTakenId())
+                                    <span class="badge badge-green" title="Taken {{ $student->id_taken_at->format('d/m/Y H:i') }}{{ $student->idTakenBy ? ' · marked by '.$student->idTakenBy->name : '' }}">✓ Taken {{ $student->id_taken_at->format('d/m') }}</span>
+                                    @can('markIdTaken', $student)
+                                        <button form="id-waiting-{{ $student->id }}" class="ml-1 text-xs text-slate-500 hover:text-slate-800 hover:underline" title="Put back in the waiting list">Undo</button>
+                                    @endcan
+                                @else
+                                    @if ($student->printed_cards_count > 0)
+                                        <span class="badge badge-blue" title="ID card printed – ready to hand over">Printed</span>
+                                    @else
+                                        <span class="badge badge-amber">Not printed</span>
+                                    @endif
+                                    @can('markIdTaken', $student)
+                                        <button form="id-taken-{{ $student->id }}" class="btn btn-success btn-sm ml-1" title="The student has collected the ID card">✓ Taken</button>
+                                    @endcan
+                                @endif
+                            </td>
                             <td class="text-right whitespace-nowrap">
                                 @if ($student->trashed())
                                     @can('students.delete')
@@ -122,7 +164,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="10"><x-empty icon="students" title="No students found">Adjust the filters, add a student or import a list from Excel.</x-empty></td></tr>
+                        <tr><td colspan="11"><x-empty icon="students" title="No students found">Adjust the filters, add a student or import a list from Excel.</x-empty></td></tr>
                     @endforelse
                     </tbody>
                 </table>
@@ -130,6 +172,11 @@
         </form>
         @foreach ($students->getCollection()->filter->trashed() as $student)
             <form id="restore-{{ $student->id }}" method="POST" action="{{ route('students.restore', $student->id) }}" hidden>@csrf</form>
+        @endforeach
+        {{-- "Taken" / "Undo" buttons submit these (forms cannot be nested inside the bulk form). --}}
+        @foreach ($students->getCollection()->reject->trashed() as $student)
+            <form id="id-taken-{{ $student->id }}" method="POST" action="{{ route('students.id-taken', $student) }}" hidden>@csrf<input type="hidden" name="taken" value="1"></form>
+            <form id="id-waiting-{{ $student->id }}" method="POST" action="{{ route('students.id-taken', $student) }}" hidden>@csrf<input type="hidden" name="taken" value="0"></form>
         @endforeach
         <div class="border-t border-slate-200 px-4 py-3">{{ $students->links() }}</div>
     </div>

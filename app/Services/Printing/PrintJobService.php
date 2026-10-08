@@ -135,19 +135,60 @@ class PrintJobService
     }
 
     /** @return array<string, mixed> composed pages */
-    public function compose(PrintJob $job, string $mode): array
+    public const SIDES = ['both', 'front', 'back'];
+
+    /** @param  string  $sides  both | front | back (fronts/backs only for two-sided cards) */
+    public function compose(PrintJob $job, string $mode, string $sides = 'both'): array
     {
         $template = $job->template();
         $data = $this->documents($job)->map(fn ($d) => $d instanceof IdCard ? DocumentData::forIdCard($d) : DocumentData::forCertificate($d))->all();
 
-        return $this->composer->compose($template, $data, $job->options ?? [], $mode);
+        return $this->composer->compose($template, $data, ['sides' => $sides] + ($job->options ?? []), $mode);
     }
 
+    /** ID card job whose cards have a back side that is printed. */
+    public function isTwoSided(PrintJob $job): bool
+    {
+        $template = $job->template();
+
+        return $job->isIdCardJob() && $template instanceof IdCardTemplate && $template->has_back && (bool) $job->option('include_back', true);
+    }
+
+    public function pdfPath(PrintJob $job, string $sides = 'both'): string
+    {
+        $suffix = ['front' => '-fronts', 'back' => '-backs'][$sides] ?? '';
+
+        return "print-jobs/{$job->school_id}/".str_replace('/', '-', $job->job_number).$suffix.'.pdf';
+    }
+
+    /**
+     * Build the job's PDF; two-sided card jobs also get separate fronts and backs PDFs
+     * for card printers without duplex (all fronts first, then flip and print all backs).
+     */
     public function buildPdf(PrintJob $job): string
     {
-        $pdf = $this->composer->pdf($this->compose($job, 'pdf'), "{$job->job_number} – {$job->template_name}");
-        $path = "print-jobs/{$job->school_id}/".str_replace('/', '-', $job->job_number).'.pdf';
-        Storage::disk(self::PDF_DISK)->put($path, $pdf);
+        $variants = $this->isTwoSided($job) ? self::SIDES : ['both'];
+        foreach ($variants as $sides) {
+            $this->writePdf($job, $sides);
+        }
+
+        return $this->pdfPath($job);
+    }
+
+    /** Path of the requested PDF variant, building it now if it does not exist yet (older jobs). */
+    public function ensurePdf(PrintJob $job, string $sides = 'both'): string
+    {
+        $sides = $this->isTwoSided($job) && in_array($sides, self::SIDES, true) ? $sides : 'both';
+        $path = $this->pdfPath($job, $sides);
+
+        return Storage::disk(self::PDF_DISK)->exists($path) ? $path : $this->writePdf($job, $sides);
+    }
+
+    private function writePdf(PrintJob $job, string $sides): string
+    {
+        $title = "{$job->job_number} – {$job->template_name}".['front' => ' (fronts)', 'back' => ' (backs)', 'both' => ''][$sides];
+        $path = $this->pdfPath($job, $sides);
+        Storage::disk(self::PDF_DISK)->put($path, $this->composer->pdf($this->compose($job, 'pdf', $sides), $title));
 
         return $path;
     }

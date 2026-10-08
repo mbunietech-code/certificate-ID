@@ -33,13 +33,42 @@
             </div>
         </form>
 
+        <div class="space-y-4">
+        <form method="POST" action="{{ route('students.import.smart-school') }}" class="card">
+            @csrf
+            <div class="card-header"><h2 class="card-title">From Smart School</h2></div>
+            <div class="card-body space-y-4 text-sm text-slate-600">
+                @if ($school?->hasSmartSchoolSource())
+                    <div>
+                        <div class="font-medium text-slate-900">{{ $school->smart_school_source === 'api' ? 'Endpoint API' : 'Local database' }}</div>
+                        <div class="mt-1 break-all text-xs text-slate-500">
+                            {{ $school->smart_school_source === 'api' ? $school->smart_school_endpoint_url : ($school->smart_school_database ?: config('services.smart_school.db_database')) }}
+                        </div>
+                    </div>
+                    <fieldset>
+                        <legend class="form-label">If an admission number already exists</legend>
+                        <div class="space-y-2">
+                            <label class="flex items-center gap-2"><input type="radio" name="duplicate_mode" value="skip" class="form-check" checked> Skip it</label>
+                            <label class="flex items-center gap-2"><input type="radio" name="duplicate_mode" value="update" class="form-check"> Update it</label>
+                        </div>
+                    </fieldset>
+                @else
+                    <p>Set a Smart School source in School Profile before importing from the master system.</p>
+                @endif
+            </div>
+            <div class="flex justify-end border-t border-slate-200 px-4 py-3">
+                <button class="btn btn-secondary" @disabled(! $school?->hasSmartSchoolSource())><x-icon name="refresh"/> Fetch &amp; preview</button>
+            </div>
+        </form>
+
         <div class="card">
             <div class="card-header"><h2 class="card-title">Columns</h2></div>
             <div class="card-body text-sm text-slate-600">
-                <p class="mb-2">Required: <strong>Admission Number, First Name, Last Name, Gender, Class</strong>.</p>
-                <p class="mb-2">Optional: Middle Name, Date of Birth, Level (O-Level / A-Level), Stream, Combination, Entry Year, Completion Year, Academic Year, Nationality, Parent Name, Parent Phone, Student Phone, Address.</p>
+                <p class="mb-2">Required: <strong>First Name, Last Name, Gender, Class</strong>.</p>
+                <p class="mb-2">Optional: Admission Number (blank is saved as {{ \App\Models\Student::NO_ADMISSION_NUMBER }}), Middle Name, Date of Birth, Level (O-Level / A-Level), Stream, Combination, Entry Year, Completion Year, Academic Year, Nationality, Parent Name, Parent Phone, Student Phone, Address.</p>
                 <p>Gender accepts M/F/Male/Female. Dates accept YYYY-MM-DD or DD/MM/YYYY. A blank academic year uses the current one.</p>
             </div>
+        </div>
         </div>
     </div>
 

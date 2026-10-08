@@ -24,6 +24,16 @@
         </div>
     </div>
 
+    <div class="card xl:col-span-3">
+        <div class="card-header"><h2 class="card-title">Smart School source</h2></div>
+        <div class="card-body grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <x-form.select name="smart_school_source" label="People source" :options="['api' => 'Endpoint API', 'database' => 'Local Smart School database']" :value="$school->smart_school_source" placeholder="Manual entry only" hint="Used by Import Students to pull names, admission numbers, class, stream and gender from the master system."/>
+            <x-form.input name="smart_school_endpoint_url" label="Endpoint URL" :value="$school->smart_school_endpoint_url" placeholder="https://benjamin.sc.tz/id_sync/people" class="sm:col-span-2" hint="Use this when the school has a public or private system endpoint."/>
+            <x-form.input name="smart_school_api_token" type="password" label="Endpoint token" hint="{{ $school->smart_school_api_token ? 'Token is saved. Leave blank to keep it.' : 'Optional, but recommended for production endpoints.' }}"/>
+            <x-form.input name="smart_school_database" label="Local DB name" :value="$school->smart_school_database" placeholder="{{ config('services.smart_school.db_database') }}" hint="Used when source is a local Smart School database. Leave blank to use the default DB name."/>
+        </div>
+    </div>
+
     <div class="space-y-4">
         <div class="card">
             <div class="card-header"><h2 class="card-title">Branding</h2></div>
